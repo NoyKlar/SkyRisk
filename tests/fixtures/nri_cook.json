@@ -1,0 +1,200 @@
+{
+    "objectIdFieldName": "OBJECTID",
+    "uniqueIdField": {
+        "name": "OBJECTID",
+        "isSystemMaintained": true
+    },
+    "globalIdFieldName": "",
+    "serverGens": {
+        "minServerGen": 187760757,
+        "serverGen": 187760757
+    },
+    "geometryType": "esriGeometryPolygon",
+    "spatialReference": {
+        "wkid": 102100,
+        "latestWkid": 3857
+    },
+    "fields": [
+        {
+            "name": "NRI_VER",
+            "type": "esriFieldTypeString",
+            "alias": "National Risk Index Version",
+            "sqlType": "sqlTypeOther",
+            "length": 50,
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "STCOFIPS",
+            "type": "esriFieldTypeString",
+            "alias": "State-County FIPS Code",
+            "sqlType": "sqlTypeOther",
+            "length": 20,
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "COUNTY",
+            "type": "esriFieldTypeString",
+            "alias": "County Name",
+            "sqlType": "sqlTypeOther",
+            "length": 250,
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "STATE",
+            "type": "esriFieldTypeString",
+            "alias": "State Name",
+            "sqlType": "sqlTypeOther",
+            "length": 250,
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "AREA",
+            "type": "esriFieldTypeDouble",
+            "alias": "Area (sq mi)",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "HRCN_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Hurricane - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "HRCN_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Hurricane - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "IFLD_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Inland Flooding - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "IFLD_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Inland Flooding - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "CFLD_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Coastal Flooding - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "CFLD_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Coastal Flooding - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "TRND_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Tornado - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "TRND_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Tornado - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "WNTW_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Winter Weather - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "WNTW_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Winter Weather - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "HWAV_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Heat Wave - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "HWAV_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Heat Wave - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "CWAV_AFREQ",
+            "type": "esriFieldTypeDouble",
+            "alias": "Cold Wave - Annualized Frequency",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        },
+        {
+            "name": "CWAV_RISKS",
+            "type": "esriFieldTypeDouble",
+            "alias": "Cold Wave - Hazard Type Risk Index Score",
+            "sqlType": "sqlTypeOther",
+            "domain": null,
+            "defaultValue": null
+        }
+    ],
+    "features": [
+        {
+            "attributes": {
+                "NRI_VER": "December 2025",
+                "STCOFIPS": "17031",
+                "COUNTY": "Cook",
+                "STATE": "Illinois",
+                "AREA": 1651.1359835100002,
+                "HRCN_AFREQ": 0.009292029663615345,
+                "HRCN_RISKS": 48.894451397580305,
+                "IFLD_AFREQ": 5.892857142857143,
+                "IFLD_RISKS": 99.93638676844783,
+                "CFLD_AFREQ": 0.012086644731381744,
+                "CFLD_RISKS": 44,
+                "TRND_AFREQ": 1.0378445739342972,
+                "TRND_RISKS": 99.96819338422391,
+                "WNTW_AFREQ": 14.59880820330166,
+                "WNTW_RISKS": 100,
+                "HWAV_AFREQ": 2.9026886558101475,
+                "HWAV_RISKS": 99.83943481053308,
+                "CWAV_AFREQ": 4.2509644490462115,
+                "CWAV_RISKS": 100
+            }
+        }
+    ]
+}

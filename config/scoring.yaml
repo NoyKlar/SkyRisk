@@ -1,0 +1,53 @@
+# Deterministic scoring configuration. Bump `version` whenever weights or thresholds change.
+version: "1.2"
+
+# Historical weather window (fixed end date keeps runs reproducible).
+window:
+  start: 2016-01-01
+  end: 2025-12-31
+
+# Daily thresholds used to count weather-event days.
+thresholds:
+  snow_day_cm: 1.0        # snowfall_sum >= 1 cm
+  heavy_snow_cm: 10.0     # snowfall_sum >= 10 cm
+  extreme_heat_c: 35.0    # temperature_2m_max >= 35 C
+  extreme_cold_c: -18.0   # temperature_2m_min <= -18 C
+  heavy_rain_mm: 50.0     # precipitation_sum >= 50 mm
+  high_wind_kmh: 90.0     # wind_gusts_10m_max >= 90 km/h (computed and stored, not scored)
+
+# Tornado AFREQ is divided by max(county area, this floor), in sq mi, so small counties
+# (e.g. Denver, 156 sq mi) are not inflated by a handful of events.
+nri_area_floor_sqmi: 1000.0
+
+# Hazard weights (sum to 1) and metric weights within each hazard (sum to 1).
+# NRI inputs are annualized frequencies (*_AFREQ), never the composite *_RISKS score.
+# Tornado AFREQ is per 1,000 sq mi of county area (localized events); the others are raw
+# AFREQ (area-wide events, or hurricane footprints larger than a county).
+hazards:
+  winter:
+    weight: 0.25
+    metrics:
+      snow_days: 0.25
+      heavy_snow_days: 0.20
+      extreme_cold_days: 0.15
+      nri_wntw_afreq: 0.25
+      nri_cwav_afreq: 0.15
+  hurricane:
+    weight: 0.25
+    metrics:
+      nri_hrcn_afreq: 1.00
+  flood:
+    weight: 0.20
+    metrics:
+      heavy_rain_days: 0.40
+      nri_ifld_afreq: 0.40
+      nri_cfld_afreq: 0.20
+  tornado:
+    weight: 0.15
+    metrics:
+      nri_trnd_afreq_per_1k_sqmi: 1.00
+  heat:
+    weight: 0.15
+    metrics:
+      extreme_heat_days: 0.50
+      nri_hwav_afreq: 0.50

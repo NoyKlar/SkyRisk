@@ -1,0 +1,16 @@
+# Fixed registry of distribution hubs. Coordinates are city centers; the FEMA NRI
+# lookup uses the county containing this point.
+hubs:
+  - {id: memphis,     name: Memphis Hub,     city: Memphis,     state: TN, lat: 35.1495, lon: -90.0490,  region: South}
+  - {id: louisville,  name: Louisville Hub,  city: Louisville,  state: KY, lat: 38.2527, lon: -85.7585,  region: South}
+  - {id: chicago,     name: Chicago Hub,     city: Chicago,     state: IL, lat: 41.8781, lon: -87.6298,  region: Midwest}
+  - {id: dallas,      name: Dallas Hub,      city: Dallas,      state: TX, lat: 32.7767, lon: -96.7970,  region: South}
+  - {id: atlanta,     name: Atlanta Hub,     city: Atlanta,     state: GA, lat: 33.7490, lon: -84.3880,  region: Southeast}
+  - {id: houston,     name: Houston Hub,     city: Houston,     state: TX, lat: 29.7604, lon: -95.3698,  region: South}
+  - {id: miami,       name: Miami Hub,       city: Miami,       state: FL, lat: 25.7617, lon: -80.1918,  region: Southeast}
+  - {id: kansas-city, name: Kansas City Hub, city: Kansas City, state: MO, lat: 39.0997, lon: -94.5786,  region: Midwest}
+  - {id: denver,      name: Denver Hub,      city: Denver,      state: CO, lat: 39.7392, lon: -104.9903, region: West}
+  - {id: phoenix,     name: Phoenix Hub,     city: Phoenix,     state: AZ, lat: 33.4484, lon: -112.0740, region: West}
+  - {id: columbus,    name: Columbus Hub,    city: Columbus,    state: OH, lat: 39.9612, lon: -82.9988,  region: Midwest}
+  - {id: newark,      name: Newark Hub,      city: Newark,      state: NJ, lat: 40.7357, lon: -74.1724,  region: Northeast}
+  - {id: minneapolis, name: Minneapolis Hub, city: Minneapolis, state: MN, lat: 44.9778, lon: -93.2650,  region: Midwest}

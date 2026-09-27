@@ -1,0 +1,1 @@
+"""Deterministic hub risk scoring."""
