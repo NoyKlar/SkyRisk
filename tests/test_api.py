@@ -6,6 +6,7 @@ from fakes import FakeProvider, answer, call
 from skyrisk.agent.core import UNAVAILABLE_MESSAGE, Agent
 from skyrisk.agent.tools import RankHubsInput, rank_hubs
 from skyrisk.api.app import create_app
+from skyrisk.api.ratelimit import RateLimiter
 from skyrisk.api.sessions import SessionStore
 
 
@@ -17,10 +18,10 @@ def api_ctx():
     ctx.conn.close()
 
 
-def _client(ctx, *providers, store=None):
+def _client(ctx, *providers, store=None, limiter=None):
     logs = []
     agent = Agent(ctx, list(providers), "system", log=logs.append)
-    app = create_app(agent, store or SessionStore(max_turns=10), ctx, log=logs.append)
+    app = create_app(agent, store or SessionStore(max_turns=10), ctx, log=logs.append, limiter=limiter)
     return TestClient(app), logs
 
 
@@ -147,3 +148,45 @@ def test_least_recently_used_session_evicted_at_cap():
     store.get_or_create(None)
     assert store.get_or_create(a)[2] is False
     assert store.get_or_create(b)[2] is True
+
+
+def _post(client, ip, message="worst for winter?"):
+    return client.post("/api/chat", json={"message": message}, headers={"X-Forwarded-For": f"{ip}, 10.0.0.1"})
+
+
+def test_per_ip_limit_returns_429_without_calling_the_agent(api_ctx):
+    provider = FakeProvider(script=[answer("one"), answer("two")])
+    client, logs = _client(api_ctx, provider, limiter=RateLimiter(2, 100))
+    assert _post(client, "1.2.3.4").status_code == 200
+    assert _post(client, "1.2.3.4").status_code == 200
+    res = _post(client, "1.2.3.4")
+    assert res.status_code == 429
+    assert "2 questions per hour" in res.json()["detail"]
+    assert int(res.headers["Retry-After"]) >= 1
+    assert len(provider.histories) == 2  # the third request never reached the model
+    assert "rate limit (ip) for 1.2.3.4" in logs
+
+
+def test_forwarded_ips_are_limited_separately(api_ctx):
+    provider = FakeProvider(script=[answer("one"), answer("two")])
+    client, _ = _client(api_ctx, provider, limiter=RateLimiter(1, 100))
+    assert _post(client, "1.1.1.1").status_code == 200
+    assert _post(client, "1.1.1.1").status_code == 429
+    assert _post(client, "2.2.2.2").status_code == 200
+
+
+def test_global_cap_applies_to_new_ips(api_ctx):
+    provider = FakeProvider(script=[answer("one")])
+    client, logs = _client(api_ctx, provider, limiter=RateLimiter(20, 1))
+    assert _post(client, "1.1.1.1").status_code == 200
+    res = _post(client, "3.3.3.3")
+    assert res.status_code == 429
+    assert "daily question limit" in res.json()["detail"]
+    assert "rate limit (global) for 3.3.3.3" in logs
+
+
+def test_without_limiter_requests_are_not_limited(api_ctx):
+    provider = FakeProvider(script=[answer(str(i)) for i in range(5)])
+    client, _ = _client(api_ctx, provider)
+    for _ in range(5):
+        assert _post(client, "1.1.1.1").status_code == 200

@@ -80,6 +80,18 @@ function renderFailure(msg, text) {
   msg.replaceChildren(el("div", "text", text));
 }
 
+async function failureText(res) {
+  if (res.status === 422) return "That message couldn't be sent. Please shorten it and try again.";
+  if (res.status === 429) {
+    try {
+      const body = await res.json();
+      if (body.detail) return body.detail;
+    } catch { /* fall through */ }
+    return "Too many questions right now. Please try again later.";
+  }
+  return "Something went wrong on the server. Please try again in a moment.";
+}
+
 async function ask(question) {
   if (pending || !question.trim()) return;
   pending = true;
@@ -98,9 +110,7 @@ async function ask(question) {
       body: JSON.stringify({ message: question, session_id: sessionId }),
     });
     if (!res.ok) {
-      renderFailure(msg, res.status === 422
-        ? "That message couldn't be sent. Please shorten it and try again."
-        : "Something went wrong on the server. Please try again in a moment.");
+      renderFailure(msg, await failureText(res));
       return;
     }
     const data = await res.json();

@@ -161,13 +161,15 @@ def _serve(ctx: ToolContext, config_dir: Path, host: str, port: int) -> int:
     import uvicorn
 
     from skyrisk.api.app import create_app
+    from skyrisk.api.ratelimit import RateLimiter
     from skyrisk.api.sessions import SessionStore
 
     built = _build_agent(ctx.conn, config_dir)
     if built is None:
         return 1
     agent, config = built
-    app = create_app(agent, SessionStore(max_turns=config.max_history_turns), ctx, log=_log)
+    app = create_app(agent, SessionStore(max_turns=config.max_history_turns), ctx, log=_log,
+                     limiter=RateLimiter.from_config(config.rate_limit))
     uvicorn.run(app, host=host, port=port)
     return 0
 

@@ -66,6 +66,8 @@ The page at `/` is plain HTML/CSS/JS served by the same process. It talks only t
 | `GET` | `/api/health` | liveness check |
 | `GET` | `/api/docs` | OpenAPI docs |
 
+`POST /api/chat` is rate limited under `rate_limit:` in `config/agent.yaml`: 20 questions per IP per hour and 100 per day in total. Past a limit it returns `429` with a friendly `detail` message and a `Retry-After` header (see [Deployment](#9-deployment-render)).
+
 Omit `session_id` on the first message, and send the returned id back with follow-ups. \
 Conversation memory lives in the server process. A session expires after 1 hour idle, at most 500 are kept, and all of them are lost on restart. If you send an expired id, a new session starts and the reply has `"session_reset": true`.
 
@@ -112,6 +114,63 @@ Run `uv run skyrisk eval --repeat 3` before merging any change to the system pro
 
 **Cost.** Deterministic injection cases make no model calls. Every other run makes one Haiku classifier call. Runs that reach the agent also make roughly 2–4 Sonnet calls: tool rounds plus the final answer. A full `--repeat 3` run costs about 85 Haiku calls and 100–250 Sonnet calls.
 
+## 9. Deployment (Render)
+
+[`render.yaml`](render.yaml) is a Render Blueprint for a single **free** web service.
+
+**Steps**
+1. Push the repo to GitHub.
+2. In Render, choose **New → Blueprint** and select the repo.
+3. When prompted, enter `ANTHROPIC_API_KEY` (required) and `OPENAI_API_KEY` (optional, for the fallback).
+   - These are `sync: false` in `render.yaml`, so they live only in the Render dashboard and are never committed.
+   - The `SKYRISK_*_MODEL` overrides from [section 3](#3-configure-env) can be added there too.
+4. Wait for the first build, then open `https://<service>.onrender.com`.
+   - Render checks `/api/health`.
+   - Every push to the default branch redeploys.
+
+**What the build does**
+- The free-tier disk is ephemeral, so the build creates the database itself: `uv sync --frozen --no-dev`, then `skyrisk ingest`, then `skyrisk score`. The SQLite file ships with the deploy.
+- The data is rebuilt from Open-Meteo and FEMA on every deploy.
+  - This takes about 5–8 minutes, mostly paced Open-Meteo requests, and it counts against Render's monthly build minutes.
+  - If ingest fails (e.g. an upstream API is down), the build fails and Render keeps serving the previous deploy.
+- The service starts with `uv run --no-sync skyrisk serve --host 0.0.0.0 --port $PORT`. Python 3.12 comes from `.python-version`.
+
+**Free-tier behaviour**
+- After 15 minutes without traffic the service spins down. The next request waits through a **cold start of about 30–60 s**.
+- A restart or spin-down clears everything held in memory: chat sessions (the page starts a new conversation and says so) and the rate-limit counters.
+
+**Protecting API credits**
+- The public URL lets anyone reach paid model calls. Each question costs one Haiku call, plus roughly 2–4 Sonnet calls if it reaches the agent.
+- `POST /api/chat` therefore has two limits. Change them in `config/agent.yaml` and redeploy:
+  ```yaml
+  rate_limit:
+    per_ip_per_hour: 20   # sliding one-hour window per client IP (from X-Forwarded-For)
+    global_per_day: 100   # all clients together; resets at 00:00 UTC
+  ```
+- Every validated question counts, including refused ones, because they still make a classifier call.
+- The client IP header can be spoofed, so treat the per-IP limit as fairness and the daily cap as the real bound.
+- The counters are in memory, so a restart resets them. Also set a monthly spend limit in the Anthropic (and OpenAI) console.
+
+## 10. Adding or removing a hub
+
+1. Edit [`config/hubs.yaml`](config/hubs.yaml). Each entry needs:
+   - `id`: lowercase letters, digits and hyphens; must be unique
+   - `name`, `city`
+   - `state`: 2-letter code
+   - `lat`, `lon`: must fall within the contiguous US
+   - `region`: `Northeast`, `Southeast`, `Midwest`, `South` or `West`
+   `uv run pytest tests/test_config.py` validates the file.
+2. Fetch data for new hubs and rescore:
+   ```bash
+   uv run skyrisk ingest     # fetches only hubs that aren't cached yet
+   uv run skyrisk score
+   ```
+   A removed hub's old rows stay in the local DB but are ignored, because scoring, tools and the system prompt read `config/hubs.yaml`. A Render build always starts from an empty DB.
+3. **Scores are relative.** Every metric is min-max scaled across the hubs (least exposed = 0, most exposed = 100) before weighting. Adding or removing any hub can shift every hub's scores and ranks, not just the new one's.
+4. **Hub count.** The count 13 is currently hard-coded in three places: `src/skyrisk/agent/tools.py`, the welcome line of `src/skyrisk/api/static/index.html`, and `test_hub_registry_loads_13_hubs` in `tests/test_config.py`. It appears in the relative-score caveat and in the `top_n` / `hub_ids` limits. Update those when the number of hubs changes. The system prompt picks up the hub list automatically.
+5. **Evals.** Cases in `evals/cases.yaml` that name hubs, regions or an expected ranking order may need updating. Rerun `uv run skyrisk eval --repeat 3`.
+6. On Render, push the change. The next deploy ingests and scores the new hub list.
+
 ## Project layout
 
 ```
@@ -121,5 +180,6 @@ src/skyrisk/   ingest/ (API clients), scoring/ (pure engine), agent/ (tools, gua
                api/ (FastAPI + static chat page), evals/ (runner, checks, report), cli.py
 tests/         offline tests with recorded fixtures and a scripted fake LLM provider
 docs/          DESIGN.md
+render.yaml    Render Blueprint (build: ingest + score; start: serve)
 agent-os/      product mission/roadmap, standards, and one spec folder per feature
 ```

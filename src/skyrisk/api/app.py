@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from skyrisk.agent.core import Agent, Log, Status
 from skyrisk.agent.tools import HubInfo, ListHubsInput, ToolContext, list_hubs
+from skyrisk.api.ratelimit import RateLimiter
 from skyrisk.api.sessions import SessionStore
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -34,7 +35,20 @@ class ChatResponse(BaseModel):
     tools_used: list[str]
 
 
-def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: Log = print) -> FastAPI:
+def client_ip(request: Request) -> str:
+    """The caller's IP: the first X-Forwarded-For entry (set by Render's proxy), else the socket peer.
+
+    The header can be spoofed, so per-IP limits are for fairness only; the global cap bounds spend.
+    """
+    if forwarded := request.headers.get("x-forwarded-for"):
+        if first := forwarded.split(",")[0].strip():
+            return first
+    return request.client.host if request.client else "unknown"
+
+
+def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: Log = print,
+               limiter: RateLimiter | None = None) -> FastAPI:
+    """`limiter=None` disables rate limiting; `skyrisk serve` always passes one."""
     app = FastAPI(title="SkyRisk", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 
     @app.exception_handler(Exception)
@@ -42,8 +56,14 @@ def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: L
         log(f"error: {request.method} {request.url.path} failed: {type(exc).__name__}: {exc}")
         return JSONResponse({"detail": "Internal error"}, status_code=500)
 
-    @app.post("/api/chat")
-    def chat(req: ChatRequest) -> ChatResponse:
+    @app.post("/api/chat", responses={429: {"description": "Rate limit reached"}})
+    def chat(req: ChatRequest, request: Request) -> ChatResponse:  # or a 429 JSONResponse
+        if limiter is not None:
+            ip = client_ip(request)
+            if limited := limiter.check(ip):
+                log(f"rate limit ({limited.scope}) for {ip}")
+                return JSONResponse({"detail": limited.message}, status_code=429,
+                                    headers={"Retry-After": str(limited.retry_after)})
         session_id, session, was_reset = sessions.get_or_create(req.session_id)
         with session.lock:
             reply = agent.ask(session.conversation, req.message)

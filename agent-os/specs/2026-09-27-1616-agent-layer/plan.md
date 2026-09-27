@@ -63,7 +63,7 @@ Plain Python functions over SQLite with no LLM code. Each tool has a Pydantic in
 | `explain_score` | `hub_id`, `hazard: … \| None` | metric rows (raw → normalized → points), notes, NRI county + area, `*_RISKS` reference values |
 | `weather_stat` | `hub_ids`, `stat: Literal["snow_day","heavy_snow","extreme_heat","extreme_cold","heavy_rain","high_wind"]`, `unit: Literal["pct_days","days_per_year"]`, `months: list[int] \| None`, `year: int \| None` (2016–2025) | value per hub, the period actually used (full window or that year), days with data, threshold used |
 
-- **The example questions from the assignment are answered by deterministic tools, not by the LLM:**
+- **The headline example questions are answered by deterministic tools, not by the LLM:**
   - "Which hubs in the Midwest are most exposed to winter disruption?" → `rank_hubs(hazard="winter", region="Midwest")`. The Pydantic `Literal` rejects unknown regions. Region values come from `config.Region`, so there is only one source of truth.
   - "What percentage of days in Denver last year had snowfall?" → `weather_stat(["denver"], "snow_day", "pct_days", year=2025)`.
     - The system prompt defines **"last year" = 2025**, the latest full year in the data window, and not the calendar year before today.
@@ -136,7 +136,7 @@ Plain Python functions over SQLite with no LLM code. Each tool has a Pydantic in
 
 About 25 cases, each with `id`, `question`, `expect` (`answered` | `refused_off_topic` | `refused_injection`), and optional `must_mention` hubs:
 - normal questions (rank, compare, explain, "% of snow days in Minneapolis", follow-ups)
-- **assignment examples**:
+- **headline example questions**:
   - "Which hubs in the Midwest are most exposed to winter disruption?": `expect_tool: rank_hubs{region: Midwest, hazard: winter}`, `must_mention` = the Midwest hubs, in the ranking order from the latest score run
   - "What percentage of days in Denver last year had snowfall?": `expect_tool: weather_stat{year: 2025, stat: snow_day}`, `must_mention: ["2025", "1 cm"]`. The answer must state the "last year = 2025" assumption and the threshold.
   - edge case: "…in 2014?" → the answer explains that the data covers 2016–2025 and does not guess

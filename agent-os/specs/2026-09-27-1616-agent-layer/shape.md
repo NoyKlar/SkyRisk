@@ -25,7 +25,7 @@ The interface is a CLI REPL (`skyrisk chat`). The FastAPI endpoint (item 8) and 
   - Every score and stat comes from a tool.
   - `AgentAnswer.scores_cited` is checked against the tool results from the same turn (tolerance ±0.05).
   - A mismatch triggers one regeneration, then a safe fallback answer.
-- **Assignment example questions map to deterministic tools:**
+- **The headline example questions map to deterministic tools:**
   - "Midwest … winter" → `rank_hubs(hazard="winter", region="Midwest")`.
   - "Denver last year snowfall %" → `weather_stat(..., year=2025)`. **"Last year" means 2025**, the latest full year in the 2016–2025 window, not the calendar year before today. The agent states this assumption and the snow-day threshold (≥ 1 cm).
 - **Guardrails, in layers:**

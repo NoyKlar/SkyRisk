@@ -1,7 +1,15 @@
 import pytest
 from pydantic import ValidationError
 
-from skyrisk.config import HubRegistry, ScoringConfig, load_hubs, load_scoring_config
+from skyrisk.config import (
+    AgentConfig,
+    HubRegistry,
+    RateLimitConfig,
+    ScoringConfig,
+    load_agent_config,
+    load_hubs,
+    load_scoring_config,
+)
 
 KNOWN_METRICS = {
     "snow_days", "heavy_snow_days", "extreme_heat_days", "extreme_cold_days",
@@ -61,3 +69,23 @@ def test_hazard_weights_must_sum_to_one():
 def test_metric_weights_must_sum_to_one():
     with pytest.raises(ValidationError, match="metric weights"):
         ScoringConfig.model_validate(_config({"a": {"weight": 1.0, "metrics": {"m": 0.6, "n": 0.6}}}))
+
+
+def test_agent_config_rate_limits(config_dir):
+    limits = load_agent_config(config_dir / "agent.yaml").rate_limit
+    assert (limits.per_ip_per_hour, limits.global_per_day) == (20, 100)
+
+
+def test_rate_limit_section_is_optional():
+    config = AgentConfig.model_validate({
+        "primary": {"provider": "anthropic", "model": "m"},
+        "max_tool_rounds": 1, "max_input_chars": 1, "max_history_turns": 1, "max_output_tokens": 1024,
+    })
+    assert config.rate_limit == RateLimitConfig()
+
+
+def test_rate_limit_must_be_positive():
+    with pytest.raises(ValidationError):
+        RateLimitConfig(per_ip_per_hour=0)
+    with pytest.raises(ValidationError):
+        RateLimitConfig(global_per_day=0)

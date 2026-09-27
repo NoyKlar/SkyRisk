@@ -1,0 +1,16 @@
+# Render Blueprint: one free web service. Python comes from .python-version, and uv is used because uv.lock exists.
+# The free-tier disk is ephemeral, so the build fetches the data and scores it; the SQLite DB ships with the deploy.
+services:
+  - type: web
+    name: skyrisk
+    runtime: python
+    plan: free
+    buildCommand: uv sync --frozen --no-dev && uv run --no-sync skyrisk ingest && uv run --no-sync skyrisk score
+    startCommand: uv run --no-sync skyrisk serve --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false   # entered in the Render dashboard, never committed
+      - key: OPENAI_API_KEY
+        sync: false

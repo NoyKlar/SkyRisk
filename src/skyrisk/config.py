@@ -122,6 +122,11 @@ class ClassifierConfig(BaseModel):
     timeout_s: float = Field(gt=0)
 
 
+class RateLimitConfig(BaseModel):
+    per_ip_per_hour: int = Field(default=20, ge=1)
+    global_per_day: int = Field(default=100, ge=1)
+
+
 class AgentConfig(BaseModel):
     primary: ModelConfig
     fallback: ModelConfig | None = None
@@ -130,6 +135,7 @@ class AgentConfig(BaseModel):
     max_input_chars: int = Field(ge=1)
     max_history_turns: int = Field(ge=1)
     max_output_tokens: int = Field(ge=1024)
+    rate_limit: RateLimitConfig = RateLimitConfig()
 
     def with_env_overrides(self, env: Mapping[str, str]) -> AgentConfig:
         data = self.model_dump()

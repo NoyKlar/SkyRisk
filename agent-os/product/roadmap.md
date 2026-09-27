@@ -24,5 +24,5 @@
 3. **Jev classifier** (TypeSafe AI, released Sept 2026) for fast intent routing and guardrail checks *(deferred: spec shaped but not implemented, because official API access requires a credit card. See `docs/DESIGN.md` §10, Future work: alternative classifier)*
 4. **Live forecast layer** — short-term risk (next 7 days) on top of historical exposure
 5. **Cost/impact weighting** — factor hub revenue and shipment volume into prioritization
-6. **Deployment** *(stretch goal — may be pulled into MVP if time allows; the assignment prefers deployment)* — to a public URL
+6. **Deployment** — to a public URL *(done: a single free Render web service with per-IP and daily chat limits; a deployed app makes the demo easier to access. See `docs/DESIGN.md` §11, Deployment)*
 7. **Executive summary report export** for leadership
