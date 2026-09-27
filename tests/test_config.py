@@ -101,9 +101,9 @@ def _classifier(**overrides):
     return {**data, **overrides}
 
 
-def test_default_classifier_is_haiku_with_jev_fallback(config_dir):
+def test_default_classifier_is_haiku_alone(config_dir):
     c = load_agent_config(config_dir / "agent.yaml").classifier
-    assert c.order == ["haiku", "jev"]
+    assert c.order == ["haiku"]
     assert c.jev.uncertain_band == (0.4, 0.6)
 
 
@@ -121,7 +121,7 @@ def test_classifier_config_validation(overrides, message):
 def test_skyrisk_classifier_env_swaps_primary_and_fallback(config_dir):
     base = load_agent_config(config_dir / "agent.yaml")
     assert base.with_env_overrides({"SKYRISK_CLASSIFIER": "jev"}).classifier.order == ["jev", "haiku"]
-    assert base.with_env_overrides({"SKYRISK_CLASSIFIER": "haiku"}).classifier.order == ["haiku", "jev"]
+    assert base.with_env_overrides({"SKYRISK_CLASSIFIER": "haiku"}).classifier.order == ["haiku"]
     env = {"SKYRISK_CLASSIFIER_MODEL": "claude-haiku-9"}
     assert base.with_env_overrides(env).classifier.haiku.model == "claude-haiku-9"
     with pytest.raises(ValueError, match="SKYRISK_CLASSIFIER"):

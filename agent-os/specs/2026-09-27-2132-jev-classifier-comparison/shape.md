@@ -30,7 +30,8 @@ Roadmap Phase 2, item 3. The user's requirements:
 - `agent/core.py` stays unchanged.
 - **Re-opened 2026-09-27 with an official key:**
   - The key-verification call is also the recorded fixture (`tests/fixtures/jev_in_scope*.json`).
-  - The configured default stays `primary: haiku`, `fallback: jev`, because the deployed site has no `JEV_API_KEY`. The benchmark result is reported objectively in DESIGN.md §7, together with what it would take to switch.
+  - The benchmark result is reported objectively in DESIGN.md §7.
+- **Final decision after the benchmark:** Jev is not used by default, not even as the fallback. The classifier is Haiku alone. Jev wrongly refused 43% of the legitimate look-alikes, while skipping a failed Haiku check blocks no one. Jev stays opt-in via `SKYRISK_CLASSIFIER=jev` for re-testing.
   - Commits stay local until the user approves a push, because Render auto-deploys on push. `Verdict` gains `decided_by` and `usage` for accounting only.
 
 ## Context

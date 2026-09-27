@@ -27,9 +27,9 @@ cp .env.example .env
 |---|---|---|
 | `ANTHROPIC_API_KEY` | yes (for the agent) | primary model (Claude Sonnet 5) and the Haiku guardrail classifier |
 | `OPENAI_API_KEY` | no | fallback model (`gpt-6-luna`). Without it, the agent runs with no fallback. |
-| `JEV_API_KEY` | no | TypeSafe Jev, the fallback guardrail classifier. Without it, the classifier is Haiku alone. |
+| `JEV_API_KEY` | no | TypeSafe Jev classifier. Not used by default; only for re-testing with `SKYRISK_CLASSIFIER=jev` or `skyrisk eval-classifier`. |
 | `SKYRISK_PRIMARY_MODEL`, `SKYRISK_FALLBACK_MODEL`, `SKYRISK_CLASSIFIER_MODEL` | no | override the model ids in `config/agent.yaml` (`SKYRISK_CLASSIFIER_MODEL` is the Haiku classifier model) |
-| `SKYRISK_CLASSIFIER` | no | `haiku` (default) or `jev`: which classifier runs first. The other one is the fallback. |
+| `SKYRISK_CLASSIFIER` | no | `haiku` (default: Haiku alone, skipped if it fails) or `jev` (opt-in re-testing: Jev first, Haiku as its fallback) |
 
 `.env` is gitignored. Ingest, score, show and the offline tests need no keys.
 
@@ -114,7 +114,9 @@ uv run skyrisk eval --case 'offtopic-*'    # filter by case id glob (repeatable)
 
 Run `uv run skyrisk eval --repeat 3` before merging any change to the system prompt, tools, guardrails or model ids, and treat a non-zero exit as a blocker. The command can run unchanged as a CI step, given the API key as a secret and a scored database.
 
-**Classifier benchmark.** `skyrisk eval-classifier` calls the guardrail classifiers directly, with no agent model, on the `injection`, `off_topic`, `false_positive` and `hebrew` cases. It compares them side by side: false-positive and miss rates, per-category accuracy, escalations, latency, and cost per 1k questions. Results and the decision are in `docs/DESIGN.md` §7.
+**Classifier benchmark.** `skyrisk eval-classifier` calls the guardrail classifiers directly, with no agent model, on the `injection`, `off_topic`, `false_positive` and `hebrew` cases. It compares them side by side: false-positive and miss rates, per-category accuracy, escalations, latency, and cost per 1k questions. Measured result: Jev was much faster and cheaper, but it wrongly refused 43% of legitimate look-alike questions. So the default is Haiku alone, with no Jev fallback: if Haiku fails, the check is skipped, which never blocks a real user. Details are in `docs/DESIGN.md` §7.
+
+**Not yet measured:** every eval so far used Sonnet as the answering model. Guardrail behaviour when the OpenAI fallback answers (a full Anthropic outage) is the next eval step.
 
 ```bash
 uv run skyrisk eval-classifier --repeat 3 --dry-run   # print the call and cost estimate, make no calls

@@ -229,7 +229,7 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
 
 
 def _classifier_description(config) -> str | None:
-    """The classifier chain as built for this run, e.g. `anthropic:claude-haiku-4-5 → fallback jev:...`."""
+    """The classifier chain as built for this run, e.g. `anthropic:claude-haiku-4-5`."""
     if config.classifier is None:
         return None
     chain = build_classifier(config.classifier, os.environ, log=lambda m: None)

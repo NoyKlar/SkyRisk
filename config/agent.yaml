@@ -8,13 +8,15 @@ fallback:
   provider: openai
   model: gpt-6-luna      # cost-efficient tier; function calling + structured outputs via Responses API
   effort: medium
-classifier:              # SKYRISK_CLASSIFIER=haiku|jev picks the primary; the other becomes the fallback
+classifier:
+  # Haiku only, with no fallback: if it fails, the check is skipped rather than risking a wrong refusal
+  # (see docs/DESIGN.md §7). Jev is opt-in for re-testing: SKYRISK_CLASSIFIER=jev makes it the primary,
+  # with Haiku as its fallback (needs JEV_API_KEY).
   primary: haiku
-  fallback: jev          # used only if JEV_API_KEY is set
   timeout_s: 5.0
   haiku:
     model: claude-haiku-4-5
-  jev:
+  jev:                   # used only when selected via SKYRISK_CLASSIFIER=jev
     model: jev-1.13.0
     base_url: https://api.typesafe.ai
     injection_threshold: 0.5

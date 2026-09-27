@@ -27,7 +27,7 @@ flowchart LR
         EV[skyrisk eval] --> AG
         API --> AG[Agent loop]
         AG --> G1[1 deterministic<br/>input checks]
-        G1 --> G2[2 classifier<br/>Haiku, fallback Jev]
+        G1 --> G2[2 Haiku<br/>classifier]
         G2 --> LLM[Primary: Claude Sonnet 5<br/>Fallback: OpenAI gpt-6-luna]
         LLM <-->|strict JSON tool calls| TOOLS[tools.py<br/>read-only SQL]
         TOOLS --> DB
@@ -65,9 +65,8 @@ class AgentAnswer(BaseModel):
 **One turn, step by step**
 1. **Deterministic input checks:** empty input, over 2,000 characters, control or invisible characters, and regexes for known injection phrasing. A hit is refused immediately, with no model call.
 2. **Classifier:** labels the question `in_scope`, `off_topic` or `injection`. It runs as a chain (`classifier:` in `config/agent.yaml`):
-   - The primary is Haiku 4.5, and TypeSafe's Jev is the fallback. `SKYRISK_CLASSIFIER=jev` reverses the order. A classifier with no API key is dropped with a warning, so the deployed site, which has no `JEV_API_KEY`, runs Haiku alone.
-   - When Jev runs, it decides confident cases itself and escalates an uncertain in-scope probability (0.4–0.6) to Haiku (§6, §7).
-   - If one classifier errors or times out (5 s), the next one is tried. If all fail, the check is **skipped**: a broken guardrail must not take the product down.
+   - The default is Haiku 4.5 alone, with **no fallback classifier**. If it errors or times out (5 s), the check is **skipped**: a broken guardrail must not take the product down, and skipping never wrongly blocks a user (§7).
+   - TypeSafe's Jev is implemented but opt-in, for re-testing only. `SKYRISK_CLASSIFIER=jev` makes it the primary, with Haiku as its fallback. Jev decides confident cases itself and escalates an uncertain in-scope probability (0.4–0.6) to Haiku (§6, §7).
 3. **Tool loop** on the primary provider. The model calls up to 6 rounds of tools, then must answer in the `AgentAnswer` schema.
    - If the provider is *unavailable* (connection error, 429, 5xx, or exhausted quota), the whole turn replays on the fallback provider.
    - Other 4xx errors are bugs and are not retried on another provider.
@@ -418,10 +417,16 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 3. latency and cost
 
 - **Measured:** the two tie on misses, and Jev is clearly better on latency and cost. On false positives, the first criterion, Jev is worse: 43% vs 0% on these look-alikes. On this data, Jev is not yet as good as Haiku as the primary classifier.
-- **Configured:** the default is `primary: haiku`, `fallback: jev`. That default was set before the run, because the deployed site has no `JEV_API_KEY`. So there Haiku runs alone either way.
-- **Jev as the fallback** (local runs, or anywhere the key is set): if Haiku fails, Jev screens the question in about 0.3 s instead of skipping the check. The cost is that Jev's look-alike false positives then apply during a Haiku outage.
+**Decision: Jev is not used by default, not even as the fallback.** `config/agent.yaml` runs Haiku alone, with no fallback classifier.
+- Our top priority is never wrongly blocking a real user.
+- If Haiku fails and the check is skipped, nobody is blocked. The regex layer, the scoped system prompt and grounding still apply, and the scoped prompt refuses off-topic questions on its own.
+- A Jev fallback would replace that skip with a classifier that wrongly refused 43% of the legitimate look-alikes, exactly when Haiku is down.
+- Its speed and cost advantages do not outweigh that.
+- The Jev code and the `eval-classifier` benchmark stay in the repo. Jev is opt-in via `SKYRISK_CLASSIFIER=jev`, for re-testing.
 
-**What it would take to make Jev the default**
+**Not yet measured: guardrails when OpenAI answers.** Every eval so far, the full-agent runs and this benchmark, used Sonnet 5 as the answering model; the OpenAI fallback (`gpt-6-luna`) was never exercised. In a full Anthropic outage, the Haiku classifier fails too, so the check is skipped, and the regex layer, the scoped prompt and grounding then rest on the OpenAI model. How well that model holds the scope and refuses off-topic and injection questions on its own is not measured yet. That is the next eval step: run `skyrisk eval` on the guardrail categories with the primary forced to the fallback provider and no classifier.
+
+**What it would take to reconsider Jev**
 1. Bring Jev's false positives on the look-alikes down to Haiku's level (0/15), and confirm it in a new `eval-classifier --repeat 3` run. Options:
    - reword the `in_scope` criteria, e.g. name "the scoring system, rules and thresholds" explicitly
    - tune the injection threshold and the uncertain band, using the probabilities the benchmark now records, so borderline look-alikes escalate to Haiku instead of being refused
@@ -442,8 +447,8 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 | History vs forecast | 10 years of history | Doesn't capture climate trend or next week's storm | History is a stable, verifiable proxy for exposure; a live forecast layer is on the roadmap |
 | Storage | SQLite single file | No multi-writer or multi-instance scaling | Zero setup, reproducible runs, fits the data size |
 | Guardrails | Regex, then Haiku classifier, then scoped prompt, then grounding | The classifier adds a Haiku call per question (refusals take 1.2–2.2 s end to end) and an API cost. A model classifier can drift on borderline questions: manual tests saw this on agricultural questions, though the repeat evals did not (§7). | Regex is free and catches known patterns; the classifier handles paraphrases. Neither is trusted alone, and grounding protects the numbers even if both miss. |
-| Classifier failure | Try the fallback classifier (Jev, when `JEV_API_KEY` is set), then fail open (skip) | An outage of every configured classifier lets unscreened questions through to the main model. With Jev as the fallback, a Haiku outage applies Jev's look-alike false positives (§7). | The main prompt still scopes the model and grounding still protects the numbers; blocking all users during an outage would be worse |
-| Classifier model | Haiku 4.5 primary, Jev fallback; Jev can be made primary through config | Haiku is ~4.7× slower (p50 1.45 s vs 0.31 s) and ~12× more expensive per question than Jev (§7) | Measured on the guardrail cases, Haiku had 0% false positives vs Jev's 43% on the look-alikes, and both missed nothing. Jev becomes primary only after a benchmark shows its false positives at Haiku's level (§7). The deployed site has no Jev key today. |
+| Classifier failure | Fail open (skip); no fallback classifier | A Haiku outage lets unscreened questions through to the main model | A Jev fallback was measured and rejected: it wrongly refused 43% of legitimate look-alikes (§7), and skipping never blocks a real user | The main prompt still scopes the model and grounding still protects the numbers; blocking all users during an outage would be worse |
+| Classifier model | Haiku 4.5 only; Jev opt-in (`SKYRISK_CLASSIFIER=jev`) for re-testing | Haiku is ~4.7× slower (p50 1.45 s vs 0.31 s) and ~12× more expensive per question than Jev (§7) | Measured on the guardrail cases, Haiku had 0% false positives vs Jev's 43% on the look-alikes, and both missed nothing. Never wrongly blocking a user comes first, so Jev is reconsidered only after a benchmark shows its false positives at Haiku's level (§7). |
 | Models | Sonnet 5 primary, OpenAI `gpt-6-luna` fallback | Two SDKs to maintain; answers vary a little between providers | A different provider survives a whole-provider outage; the neutral provider protocol keeps the agent loop provider-agnostic |
 | Prompt caching | An `ephemeral` cache breakpoint on the system block (`anthropic_provider.py`, `_Session.__init__`), which caches the tools and system prompt together | The prompt must be byte-stable, so it is built once at startup and a config change needs a restart. The growing in-turn history and the short classifier prompt are not cached. After a few idle minutes the cache expires and the next call pays the write again. | Every Sonnet call reuses the ~3.1k-token prefix. Measured 2026-09-27: 3,139 tokens read from cache on every call, with only 86–607 uncached input tokens per call. |
 | Invalid answers | One correction round, then a safe refusal | Extra latency on a bad turn; occasionally no answer | Never shows an unverified number |
@@ -483,17 +488,16 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 
 The guardrail classifier sits behind a small `Classifier` interface (`classify(text) -> Verdict`, in `src/skyrisk/agent/guardrails.py`). The agent depends only on that interface, and `safe_classify` fails open. That made the classifier the easiest component to swap.
 
-**Status: implemented and measured.**
-- TypeSafe's Jev is implemented as `JevClassifier` (`src/skyrisk/agent/jev.py`, spec `agent-os/specs/2026-09-27-2132-jev-classifier-comparison/`).
-- It sits in a configurable chain with Haiku (§1). It asks "in scope?" and "injection?" in one call, decides the confident cases itself, and escalates uncertain ones to Haiku.
-- The measured comparison, the decision, and what it would take to make Jev the default are in §7 ("Classifier comparison").
+**Status: implemented, measured, and not used by default.**
+- TypeSafe's Jev is implemented as `JevClassifier` (`src/skyrisk/agent/jev.py`, spec `agent-os/specs/2026-09-27-2132-jev-classifier-comparison/`). It asks "in scope?" and "injection?" in one call, decides the confident cases itself, and escalates uncertain ones to Haiku.
+- Benchmarked against Haiku (§7), it was about 4.7× faster and 12× cheaper, with no misses. But it wrongly refused 43% of the legitimate look-alike questions, against 0% for Haiku.
+- Never wrongly blocking a real user is the top priority, so the default is Haiku alone, with **no Jev fallback**. If Haiku fails, skipping the check blocks no one.
+- Jev stays available for re-testing: set `SKYRISK_CLASSIFIER=jev` (with `JEV_API_KEY`), or run `skyrisk eval-classifier`.
 - Earlier, the spec was shaped and then paused because official API access requires a credit card. It was re-opened once an official key was available.
 
-**Next steps**, if Jev is pursued:
-- reduce its look-alike false positives
-- benchmark it on the `normal` and `core_examples` categories
-
-Both are covered in §7.
+**Next steps**
+1. **Measure guardrail behaviour when OpenAI answers.** All evals so far used Sonnet as the answering model. A full Anthropic outage, where the classifier is skipped and the OpenAI fallback answers, is not measured yet (§7). This is the next step.
+2. **Jev, only if it is reconsidered:** reduce its look-alike false positives, then benchmark the `normal` and `core_examples` categories (§7).
 
 ## 11. Deployment
 
@@ -515,7 +519,7 @@ flowchart LR
   - Upstream data is refetched on every deploy.
   - A failed ingest fails the build, and Render keeps serving the previous deploy, so an upstream outage never produces a half-built database.
 - **Secrets** (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) are `sync: false` entries. They are entered in the Render dashboard and never committed.
-- **No `JEV_API_KEY` is configured on Render**, so the deployed classifier is Haiku alone. The Jev fallback is dropped with a startup warning. §7 lists what switching would take.
+- **No `JEV_API_KEY` is configured on Render.** None is needed: the classifier is Haiku alone by default, and Jev is not used (§7).
 - **Health check:** `/api/health`. Render only routes traffic to a new deploy once it answers.
 
 **Protecting API credits**
