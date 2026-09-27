@@ -34,6 +34,14 @@ function scrollToEnd() {
   thread.scrollTop = thread.scrollHeight;
 }
 
+function typingDots() {
+  // Decorative only: screen readers announce just "Thinking".
+  const dots = el("span", "dots");
+  dots.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 3; i++) dots.appendChild(el("span", "dot"));
+  return dots;
+}
+
 function addUserMessage(text) {
   empty.hidden = true;
   const msg = el("div", "msg user text", text);
@@ -78,7 +86,8 @@ async function ask(question) {
   send.disabled = true;
   addUserMessage(question);
 
-  const msg = el("div", "msg assistant pending", "Thinking…");
+  const msg = el("div", "msg assistant pending", "Thinking");
+  msg.appendChild(typingDots());
   thread.appendChild(msg);
   scrollToEnd();
 
@@ -132,8 +141,55 @@ input.addEventListener("keydown", (event) => {
 
 input.addEventListener("input", autoSize);
 
+function insertHub(name) {
+  // Insert at the cursor, padded with spaces so it doesn't run into neighbouring words.
+  const { selectionStart: start, selectionEnd: end, value } = input;
+  const before = start > 0 && !/\s$/.test(value.slice(0, start)) ? " " : "";
+  const after = end < value.length && !/^\s/.test(value.slice(end)) ? " " : "";
+  input.focus();
+  input.setRangeText(before + name + after, start, end, "end");
+  autoSize();
+}
+
+function renderHubs(hubs) {
+  hubs = [...hubs].sort((a, b) => a.city.localeCompare(b.city));
+  const byRegion = new Map();
+  for (const hub of hubs) {
+    if (!byRegion.has(hub.region)) byRegion.set(hub.region, []);
+    byRegion.get(hub.region).push(hub);
+  }
+  const groups = document.getElementById("hubs-groups");
+  for (const region of [...byRegion.keys()].sort()) {
+    const group = el("section", "hub-group");
+    group.appendChild(el("h3", "", region));
+    const list = el("ul");
+    for (const hub of byRegion.get(region)) {
+      const button = el("button", "hub", hub.city);
+      button.type = "button";
+      button.dir = "auto";
+      button.title = `${hub.name}, ${hub.state} (insert into question)`;
+      button.addEventListener("click", () => insertHub(hub.city));
+      const li = el("li");
+      li.appendChild(button);
+      list.appendChild(li);
+    }
+    group.appendChild(list);
+    groups.appendChild(group);
+  }
+  document.getElementById("hubs-panel").hidden = false;
+
+  const line = document.getElementById("hubs-line");
+  line.textContent = "Hubs: " + hubs.map((h) => h.city).join(" · ");
+  line.hidden = false;
+}
+
+fetch("/api/hubs")
+  .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+  .then(renderHubs)
+  .catch(() => { /* the panel is a convenience; chat works without it */ });
+
 for (const chip of document.querySelectorAll(".chip")) {
-  chip.addEventListener("click", () => ask(chip.textContent));
+  chip.addEventListener("click", () => ask(chip.querySelector("span").textContent));
 }
 
 document.getElementById("new-chat").addEventListener("click", async () => {

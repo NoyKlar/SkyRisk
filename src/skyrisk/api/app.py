@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from skyrisk.agent.core import Agent, Log, Status
+from skyrisk.agent.tools import HubInfo, ListHubsInput, ToolContext, list_hubs
 from skyrisk.api.sessions import SessionStore
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -33,7 +34,7 @@ class ChatResponse(BaseModel):
     tools_used: list[str]
 
 
-def create_app(agent: Agent, sessions: SessionStore, *, log: Log = print) -> FastAPI:
+def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: Log = print) -> FastAPI:
     app = FastAPI(title="SkyRisk", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 
     @app.exception_handler(Exception)
@@ -67,6 +68,10 @@ def create_app(agent: Agent, sessions: SessionStore, *, log: Log = print) -> Fas
     def reset_session(session_id: str) -> Response:
         sessions.reset(session_id)
         return Response(status_code=204)
+
+    @app.get("/api/hubs")
+    def hubs() -> list[HubInfo]:
+        return list_hubs(ctx, ListHubsInput()).hubs
 
     @app.get("/api/health")
     def health() -> dict:

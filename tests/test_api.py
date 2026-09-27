@@ -20,7 +20,7 @@ def api_ctx():
 def _client(ctx, *providers, store=None):
     logs = []
     agent = Agent(ctx, list(providers), "system", log=logs.append)
-    app = create_app(agent, store or SessionStore(max_turns=10), log=logs.append)
+    app = create_app(agent, store or SessionStore(max_turns=10), ctx, log=logs.append)
     return TestClient(app), logs
 
 
@@ -106,6 +106,13 @@ def test_page_static_and_health(api_ctx):
     assert page.status_code == 200 and 'id="app"' in page.text and 'dir="auto"' in page.text
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/api/health").json() == {"status": "ok"}
+
+
+def test_hubs_lists_registry_with_regions(api_ctx):
+    client, _ = _client(api_ctx, FakeProvider())
+    hubs = client.get("/api/hubs").json()
+    assert [h["hub_id"] for h in hubs] == [h.id for h in api_ctx.registry.hubs]
+    assert set(hubs[0]) == {"hub_id", "name", "city", "state", "region"}
 
 
 # --- SessionStore ------------------------------------------------------------------------

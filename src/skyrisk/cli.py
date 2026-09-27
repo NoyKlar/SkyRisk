@@ -144,17 +144,17 @@ def _chat(conn, config_dir: Path, question: str | None) -> int:
             _print_reply(agent.ask(conversation, line))
 
 
-def _serve(conn, config_dir: Path, host: str, port: int) -> int:
+def _serve(ctx: ToolContext, config_dir: Path, host: str, port: int) -> int:
     import uvicorn
 
     from skyrisk.api.app import create_app
     from skyrisk.api.sessions import SessionStore
 
-    built = _build_agent(conn, config_dir)
+    built = _build_agent(ctx.conn, config_dir)
     if built is None:
         return 1
     agent, config = built
-    app = create_app(agent, SessionStore(max_turns=config.max_history_turns), log=_log)
+    app = create_app(agent, SessionStore(max_turns=config.max_history_turns), ctx, log=_log)
     uvicorn.run(app, host=host, port=port)
     return 0
 
@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "chat":
             return _chat(conn, args.config_dir, args.question)
         elif args.command == "serve":
-            return _serve(conn, args.config_dir, args.host, args.port)
+            return _serve(ToolContext(conn, registry, config), args.config_dir, args.host, args.port)
     finally:
         conn.close()
     return 0
