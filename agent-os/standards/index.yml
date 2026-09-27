@@ -1,2 +1,11 @@
 # Agent OS Standards Index
 
+backend:
+  external-api-clients:
+    description: parse/fetch split, get_json retries, fail-loud Pydantic validation for external APIs
+
+testing:
+  injectable-side-effects:
+    description: Inject client/sleep/log/clock as params; never monkeypatch
+  no-live-network:
+    description: Recorded fixtures + MockTransport; live tests opt-in via -m live

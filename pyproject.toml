@@ -25,3 +25,6 @@ packages = ["src/skyrisk"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Live tests hit real APIs; skipped by default. Run with `uv run pytest -m live`.
+addopts = "-m 'not live'"
+markers = ["live: calls real external APIs (Open-Meteo, FEMA NRI)"]
