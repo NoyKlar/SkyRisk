@@ -7,7 +7,7 @@
 ## Backend
 
 - Python 3.12
-- FastAPI
+- FastAPI, served by uvicorn (`skyrisk serve`)
 - Pydantic v2
 - httpx (calls to public data APIs)
 - APScheduler (daily score recompute + alert webhook)

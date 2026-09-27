@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkyRisk</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <header class="header">
+      <div>
+        <h1 class="brand">SkyRisk</h1>
+        <p class="subtitle">Weather-risk exposure for our distribution hubs</p>
+      </div>
+      <button id="new-chat" class="ghost" type="button">New conversation</button>
+    </header>
+
+    <main id="thread" class="thread" aria-live="polite">
+      <section id="empty" class="empty">
+        <p class="empty-lead">Ask about hub rankings, comparisons, why a hub scores the way it does, or historical weather stats.</p>
+        <div class="chips">
+          <button class="chip" type="button">Which hubs in the Midwest are most exposed to winter disruption?</button>
+          <button class="chip" type="button">Compare Miami and Houston in terms of hurricane and flood exposure.</button>
+          <button class="chip" type="button">What percentage of days in Denver last year had snowfall?</button>
+          <button class="chip" type="button">Why is the Dallas hub's weather disruption risk high?</button>
+        </div>
+      </section>
+    </main>
+
+    <form id="composer" class="composer">
+      <textarea id="input" dir="auto" rows="1" placeholder="Ask about a hub's weather exposure…" aria-label="Your question" required></textarea>
+      <button id="send" class="send" type="submit">Send</button>
+    </form>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

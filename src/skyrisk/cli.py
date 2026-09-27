@@ -36,6 +36,10 @@ def _parser() -> argparse.ArgumentParser:
 
     chat = sub.add_parser("chat", help="ask the SkyRisk agent questions (interactive)")
     chat.add_argument("--question", "-q", help="answer one question and exit")
+
+    serve = sub.add_parser("serve", help="run the chat web page and JSON API")
+    serve.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"), help="bind address (default: $HOST or 127.0.0.1)")
+    serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")), help="port (default: $PORT or 8000)")
     return p
 
 
@@ -98,17 +102,25 @@ def _print_reply(reply) -> None:
     print(f"\033[2m[{' | '.join(footer)}]\033[0m\n")
 
 
-def _chat(conn, config_dir: Path, question: str | None) -> int:
-    load_dotenv()
-    def log(msg: str) -> None:
-        style = "\033[1;31m" if msg.startswith("CONFIGURATION ERROR") else "\033[2m"  # bold red vs dim
-        print(f"{style}{msg}\033[0m", file=sys.stderr)
+def _log(msg: str) -> None:
+    style = "\033[1;31m" if msg.startswith("CONFIGURATION ERROR") else "\033[2m"  # bold red vs dim
+    print(f"{style}{msg}\033[0m", file=sys.stderr)
 
+
+def _build_agent(conn, config_dir: Path):
+    load_dotenv()
     try:
-        agent, config = build_agent(conn, config_dir, os.environ, log=log)
+        return build_agent(conn, config_dir, os.environ, log=_log)
     except AgentSetupError as e:
         print(f"{e} Set it in .env (see .env.example).", file=sys.stderr)
+        return None
+
+
+def _chat(conn, config_dir: Path, question: str | None) -> int:
+    built = _build_agent(conn, config_dir)
+    if built is None:
         return 1
+    agent, config = built
     conversation = Conversation(max_turns=config.max_history_turns)
     if question is not None:
         reply = agent.ask(conversation, question)
@@ -132,11 +144,27 @@ def _chat(conn, config_dir: Path, question: str | None) -> int:
             _print_reply(agent.ask(conversation, line))
 
 
+def _serve(conn, config_dir: Path, host: str, port: int) -> int:
+    import uvicorn
+
+    from skyrisk.api.app import create_app
+    from skyrisk.api.sessions import SessionStore
+
+    built = _build_agent(conn, config_dir)
+    if built is None:
+        return 1
+    agent, config = built
+    app = create_app(agent, SessionStore(max_turns=config.max_history_turns), log=_log)
+    uvicorn.run(app, host=host, port=port)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     registry = load_hubs(args.config_dir / "hubs.yaml")
     config = load_scoring_config(args.config_dir / "scoring.yaml")
-    conn = db.connect(args.db)
+    # The API serves requests from a threadpool; tools only read the shared connection.
+    conn = db.connect(args.db, check_same_thread=args.command != "serve")
     try:
         if args.command == "ingest":
             with httpx.Client(timeout=HTTP_TIMEOUT_S) as client:
@@ -151,6 +179,8 @@ def main(argv: list[str] | None = None) -> int:
             return _show(ToolContext(conn, registry, config), args.hub_id)
         elif args.command == "chat":
             return _chat(conn, args.config_dir, args.question)
+        elif args.command == "serve":
+            return _serve(conn, args.config_dir, args.host, args.port)
     finally:
         conn.close()
     return 0

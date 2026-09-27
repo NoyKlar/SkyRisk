@@ -31,10 +31,10 @@ def snowy(hub_index: int, day: date) -> bool:
     return day.toordinal() % (hub_index + 3) == 0
 
 
-def build_scored_db():
+def build_scored_db(check_same_thread: bool = True):
     registry = load_hubs(ROOT / "config" / "hubs.yaml")
     scoring = load_scoring_config(ROOT / "config" / "scoring.yaml")
-    conn = db.connect(":memory:")
+    conn = db.connect(":memory:", check_same_thread=check_same_thread)
     db.upsert_hubs(conn, registry.hubs)
     n = scoring.window.num_days
     for i, hub in enumerate(registry.hubs):
