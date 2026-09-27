@@ -117,9 +117,47 @@ class ModelConfig(BaseModel):
     effort: Literal["low", "medium", "high"] = "medium"
 
 
-class ClassifierConfig(BaseModel):
+ClassifierName = Literal["haiku", "jev"]
+CLASSIFIER_NAMES: tuple[ClassifierName, ...] = ("haiku", "jev")
+
+
+class HaikuClassifierConfig(BaseModel):
     model: str
+
+
+class JevClassifierConfig(BaseModel):
+    model: str
+    base_url: str
+    injection_threshold: float = Field(ge=0, le=1)
+    # An in_scope probability inside [low, high] is too uncertain for Jev alone; it escalates to Haiku.
+    uncertain_band: tuple[float, float]
+
+    @model_validator(mode="after")
+    def _band(self) -> JevClassifierConfig:
+        low, high = self.uncertain_band
+        if not 0 <= low < high <= 1:
+            raise ValueError(f"uncertain_band must satisfy 0 <= low < high <= 1, got {list(self.uncertain_band)}")
+        return self
+
+
+class ClassifierConfig(BaseModel):
+    primary: ClassifierName
+    fallback: ClassifierName | None = None
     timeout_s: float = Field(gt=0)
+    haiku: HaikuClassifierConfig
+    jev: JevClassifierConfig | None = None
+
+    @model_validator(mode="after")
+    def _chain(self) -> ClassifierConfig:
+        if self.primary == self.fallback:
+            raise ValueError("classifier fallback must differ from primary")
+        if "jev" in self.order and self.jev is None:
+            raise ValueError("classifier 'jev' is selected but has no jev settings")
+        return self
+
+    @property
+    def order(self) -> list[ClassifierName]:
+        return [self.primary] + ([self.fallback] if self.fallback else [])
 
 
 class RateLimitConfig(BaseModel):
@@ -144,7 +182,13 @@ class AgentConfig(BaseModel):
         if (model := env.get("SKYRISK_FALLBACK_MODEL")) and data["fallback"]:
             data["fallback"]["model"] = model
         if (model := env.get("SKYRISK_CLASSIFIER_MODEL")) and data["classifier"]:
-            data["classifier"]["model"] = model
+            data["classifier"]["haiku"]["model"] = model
+        if (name := env.get("SKYRISK_CLASSIFIER")) and data["classifier"]:
+            if name not in CLASSIFIER_NAMES:
+                raise ValueError(f"SKYRISK_CLASSIFIER must be one of {list(CLASSIFIER_NAMES)}, got {name!r}")
+            c = data["classifier"]
+            if name != c["primary"]:  # the chosen classifier leads; the previous primary becomes its fallback
+                c["primary"], c["fallback"] = name, c["primary"]
         return AgentConfig.model_validate(data)
 
 

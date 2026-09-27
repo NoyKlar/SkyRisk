@@ -1,0 +1,17 @@
+{
+  "model": "jev-1.13.0",
+  "answers": {
+    "in_scope": {
+      "type": "noul",
+      "noul": 0.92
+    },
+    "injection": {
+      "type": "noul",
+      "noul": 0.03
+    }
+  },
+  "usage": {
+    "input_tokens": 499,
+    "output_tokens": 39
+  }
+}

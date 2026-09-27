@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from skyrisk.agent.schema import AgentAnswer
 from skyrisk.agent.tools import ScoreRef
@@ -58,9 +58,27 @@ def check_input(text: str, max_chars: int) -> InputRejection | None:
 
 # --- classifier -----------------------------------------------------------------------
 
-class Verdict(BaseModel):
-    label: Literal["in_scope", "off_topic", "injection"]
+Label = Literal["in_scope", "off_topic", "injection"]
+
+
+class LabelOutput(BaseModel):
+    """The structured output the Haiku classifier must return."""
+
+    label: Label
     reason: str
+
+
+class CallUsage(BaseModel):
+    model: str
+    input_tokens: int
+    output_tokens: int
+
+
+class Verdict(BaseModel):
+    label: Label
+    reason: str
+    decided_by: str = ""  # e.g. "haiku", "jev", "jev→haiku"; for reports only
+    usage: list[CallUsage] = Field(default_factory=list)  # every model call behind this verdict, for cost accounting
 
 
 class Classifier(Protocol):
@@ -95,16 +113,44 @@ class HaikuClassifier:
             max_tokens=256,
             system=CLASSIFIER_PROMPT,
             messages=[{"role": "user", "content": f"<question>\n{text}\n</question>"}],
-            output_config={"format": {"type": "json_schema", "schema": _verdict_schema()}},
+            output_config={"format": {"type": "json_schema", "schema": _label_schema()}},
         )
         raw = next(b.text for b in response.content if b.type == "text")
-        return Verdict.model_validate_json(raw)
+        out = LabelOutput.model_validate_json(raw)
+        usage = CallUsage(model=self._model, input_tokens=response.usage.input_tokens,
+                          output_tokens=response.usage.output_tokens)
+        return Verdict(label=out.label, reason=out.reason, decided_by="haiku", usage=[usage])
 
 
-def _verdict_schema() -> dict[str, Any]:
+def _label_schema() -> dict[str, Any]:
     from skyrisk.agent.tools import strict_json_schema
 
-    return strict_json_schema(Verdict)
+    return strict_json_schema(LabelOutput)
+
+
+class ClassifierChainError(RuntimeError):
+    pass
+
+
+class FallbackClassifier:
+    """Try each classifier in order; raise only if every one fails (`safe_classify` then skips the check)."""
+
+    def __init__(self, classifiers: list[Classifier], log: Log) -> None:
+        if not classifiers:
+            raise ValueError("FallbackClassifier needs at least one classifier")
+        self._classifiers = classifiers
+        self._log = log
+        self.name = " → fallback ".join(c.name for c in classifiers)
+
+    def classify(self, text: str) -> Verdict:
+        errors = []
+        for classifier in self._classifiers:
+            try:
+                return classifier.classify(text)
+            except Exception as e:  # noqa: BLE001 - any failure moves on to the next classifier
+                self._log(f"warning: classifier {classifier.name} failed ({type(e).__name__}: {e})")
+                errors.append(f"{classifier.name}: {type(e).__name__}")
+        raise ClassifierChainError("every classifier failed: " + "; ".join(errors))
 
 
 def safe_classify(classifier: Classifier | None, text: str, log: Log) -> Verdict | None:

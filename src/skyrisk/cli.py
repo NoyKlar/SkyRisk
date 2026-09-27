@@ -1,4 +1,4 @@
-"""Command-line entry point: `skyrisk ingest | score | show | chat | serve | eval`."""
+"""Command-line entry point: `skyrisk ingest | score | show | chat | serve | eval | eval-classifier`."""
 
 from __future__ import annotations
 
@@ -14,9 +14,10 @@ from dotenv import load_dotenv
 
 from skyrisk import db, pipeline
 from skyrisk.agent.core import Conversation
-from skyrisk.agent.factory import AgentSetupError, build_agent
+from skyrisk.agent.factory import CLASSIFIER_KEYS, AgentSetupError, build_agent, build_classifier, build_classifiers
 from skyrisk.agent.tools import ExplainScoreInput, ToolContext, ToolError, explain_score
-from skyrisk.config import load_hubs, load_scoring_config
+from skyrisk.config import CLASSIFIER_NAMES, load_agent_config, load_hubs, load_scoring_config
+from skyrisk.evals import classifier_bench
 from skyrisk.evals.cases import load_cases
 from skyrisk.evals.report import write_reports
 from skyrisk.evals.runner import EvalMeta, run_evals
@@ -53,6 +54,17 @@ def _parser() -> argparse.ArgumentParser:
     ev.add_argument("--case", action="append", dest="case_globs", metavar="GLOB", help="only case ids matching (repeatable)")
     ev.add_argument("--category", action="append", dest="categories", metavar="NAME", help="only this category (repeatable)")
     ev.add_argument("--out", type=Path, default=Path("evals/results"), help="report directory")
+
+    ec = sub.add_parser("eval-classifier", help="benchmark the guardrail classifiers directly on the guardrail "
+                                                "eval cases (uses API credits unless --dry-run)")
+    ec.add_argument("--classifier", action="append", dest="classifiers", choices=CLASSIFIER_NAMES,
+                    help="classifier to benchmark (repeatable; default: all)")
+    ec.add_argument("--cases", type=Path, default=Path("evals/cases.yaml"), help="eval cases file")
+    ec.add_argument("--category", action="append", dest="categories", metavar="NAME",
+                    help=f"only this category (repeatable; default: {', '.join(classifier_bench.DEFAULT_CATEGORIES)})")
+    ec.add_argument("--repeat", type=int, default=1, metavar="N", help="calls per case per classifier")
+    ec.add_argument("--out", type=Path, default=Path("evals/results"), help="report directory")
+    ec.add_argument("--dry-run", action="store_true", help="print the call and cost estimate and exit")
     return p
 
 
@@ -201,7 +213,7 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
         started_at=started.isoformat(timespec="seconds"),
         primary_model=f"{config.primary.provider}:{config.primary.model}",
         fallback_model=f"{config.fallback.provider}:{config.fallback.model}" if config.fallback else None,
-        classifier_model=config.classifier.model if config.classifier else None,
+        classifier_model=_classifier_description(config),
         score_run_id=run_id,
         scoring_config_version=ctx.scoring.version,
     )
@@ -216,8 +228,61 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
     return 0 if report.passed else 1
 
 
+def _classifier_description(config) -> str | None:
+    """The classifier chain as built for this run, e.g. `anthropic:claude-haiku-4-5 → fallback jev:...`."""
+    if config.classifier is None:
+        return None
+    chain = build_classifier(config.classifier, os.environ, log=lambda m: None)
+    return chain.name if chain else None
+
+
+def _eval_classifier(config_dir: Path, args: argparse.Namespace) -> int:
+    """Exit codes: 0 = report written (or dry run), 2 = setup error."""
+    load_dotenv()
+    config = load_agent_config(config_dir / "agent.yaml").with_env_overrides(os.environ)
+    if config.classifier is None:
+        print("No classifier is configured in agent.yaml.", file=sys.stderr)
+        return 2
+    keys = args.classifiers or [k for k in CLASSIFIER_NAMES if k != "jev" or config.classifier.jev is not None]
+    categories = args.categories or list(classifier_bench.DEFAULT_CATEGORIES)
+    cases = [c for c in load_cases(args.cases) if c.category in categories]
+    if not cases:
+        print("No eval cases match the filters.", file=sys.stderr)
+        return 2
+    if args.repeat < 1:
+        print("--repeat must be at least 1.", file=sys.stderr)
+        return 2
+    escalation = bool(os.environ.get(CLASSIFIER_KEYS["haiku"]))
+    print(f"{len(cases)} case(s) x {args.repeat} per classifier ({', '.join(keys)}). Estimate:")
+    for line in classifier_bench.estimate(cases, keys, args.repeat, escalation_possible=escalation):
+        print(f"  {line}")
+    if args.dry_run:
+        return 0
+
+    available = build_classifiers(config.classifier, os.environ, log=_log)
+    missing = [k for k in keys if k not in available]
+    if missing:
+        print(f"Missing API key for: {', '.join(f'{k} ({CLASSIFIER_KEYS[k]})' for k in missing)}. "
+              "Set it in .env (see .env.example).", file=sys.stderr)
+        return 2
+    started = datetime.now().astimezone()
+    report = classifier_bench.run_bench({k: available[k] for k in keys}, cases,
+                                        repeat=args.repeat, max_input_chars=config.max_input_chars,
+                                        started_at=started.isoformat(timespec="seconds"), categories=categories)
+    path = classifier_bench.write_reports(report, args.out, started.strftime("%Y%m%d-%H%M%S"))
+    for r in report.results:
+        m = r.metrics
+        cost = f"${m.cost_per_1k_usd:.3f}/1k" if m.cost_per_1k_usd is not None else "cost n/a"
+        print(f"{r.key}: FP {m.false_positives_production} | misses {m.misses_production} (production) | "
+              f"p50 {m.latency_p50_s:.2f}s | escalated {m.escalations} | errors {m.errors} | {cost}")
+    print(f"Report: {path} (also {args.out / 'classifier-latest.md'})")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
+    if args.command == "eval-classifier":  # needs no database
+        return _eval_classifier(args.config_dir, args)
     registry = load_hubs(args.config_dir / "hubs.yaml")
     config = load_scoring_config(args.config_dir / "scoring.yaml")
     # The API serves requests from a threadpool; tools only read the shared connection.

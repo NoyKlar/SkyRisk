@@ -3,7 +3,15 @@ from pathlib import Path
 import pytest
 import yaml
 
-from skyrisk.agent.guardrails import check_grounding, check_input, tool_numbers
+from skyrisk.agent.guardrails import (
+    ClassifierChainError,
+    FallbackClassifier,
+    Verdict,
+    check_grounding,
+    check_input,
+    safe_classify,
+    tool_numbers,
+)
 from skyrisk.agent.schema import AgentAnswer
 from skyrisk.agent.tools import ScoreRef
 
@@ -49,3 +57,41 @@ def test_grounding_flags_wrong_hazard_and_invented_numbers():
     answer = _answer("Denver scores 12.34 on heat.", [("denver", "heat", 12.34)])
     problems = check_grounding(answer, scores, [67.52])
     assert any("no tool returned" in p for p in problems)
+
+
+# --- classifier fallback chain -----------------------------------------------------------
+
+class _Classifier:
+    def __init__(self, name, label="in_scope", error=None):
+        self.name, self.label, self.error, self.calls = name, label, error, 0
+
+    def classify(self, text):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return Verdict(label=self.label, reason=self.name, decided_by=self.name)
+
+
+def test_fallback_chain_uses_the_primary_when_it_works():
+    primary, secondary = _Classifier("a", "off_topic"), _Classifier("b")
+    chain = FallbackClassifier([primary, secondary], log=lambda m: None)
+    assert chain.classify("q").decided_by == "a"
+    assert (secondary.calls, chain.name) == (0, "a → fallback b")
+
+
+def test_fallback_chain_moves_on_when_the_primary_fails():
+    logs = []
+    chain = FallbackClassifier([_Classifier("a", error=TimeoutError("slow")), _Classifier("b", "injection")],
+                               log=logs.append)
+    assert chain.classify("q").label == "injection"
+    assert logs == ["warning: classifier a failed (TimeoutError: slow)"]
+
+
+def test_fallback_chain_all_failing_is_skipped_by_safe_classify():
+    chain = FallbackClassifier([_Classifier("a", error=OSError("down")), _Classifier("b", error=OSError("down"))],
+                               log=lambda m: None)
+    with pytest.raises(ClassifierChainError):
+        chain.classify("q")
+    logs = []
+    assert safe_classify(chain, "q", logs.append) is None
+    assert "skipping" in logs[-1]

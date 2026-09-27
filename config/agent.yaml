@@ -1,5 +1,5 @@
 # Agent configuration. Model IDs can be overridden with SKYRISK_PRIMARY_MODEL,
-# SKYRISK_FALLBACK_MODEL and SKYRISK_CLASSIFIER_MODEL.
+# SKYRISK_FALLBACK_MODEL and SKYRISK_CLASSIFIER_MODEL (the Haiku classifier model).
 primary:
   provider: anthropic
   model: claude-sonnet-5
@@ -8,9 +8,17 @@ fallback:
   provider: openai
   model: gpt-6-luna      # cost-efficient tier; function calling + structured outputs via Responses API
   effort: medium
-classifier:
-  model: claude-haiku-4-5
+classifier:              # SKYRISK_CLASSIFIER=haiku|jev picks the primary; the other becomes the fallback
+  primary: haiku
+  fallback: jev          # used only if JEV_API_KEY is set
   timeout_s: 5.0
+  haiku:
+    model: claude-haiku-4-5
+  jev:
+    model: jev-1.13.0
+    base_url: https://api.typesafe.ai
+    injection_threshold: 0.5
+    uncertain_band: [0.4, 0.6]   # in_scope probability inside the band -> escalate to Haiku
 max_tool_rounds: 6
 max_input_chars: 2000
 max_history_turns: 10

@@ -1,4 +1,4 @@
-> **Status: NOT IMPLEMENTED (dropped 2026-09-27).** Official TypeSafe API access requires a credit card, and we will not use a third-party key. All code was discarded before any measured run. This spec is kept as a record of the decision; see `docs/DESIGN.md` §10 (Future work: alternative classifier).
+> **Status: IN PROGRESS (re-opened 2026-09-27 with an official TypeSafe key in `JEV_API_KEY`).** The original plan below is being implemented as written, with these changes: the key-verification call doubles as the recorded fixture, the default classifier stays `haiku` (Jev is the fallback), and nothing is pushed without the user's OK, because Render auto-deploys on push.
 
 # Spec 5: Jev classifier + measured comparison against Haiku
 

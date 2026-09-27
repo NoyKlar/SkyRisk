@@ -7,7 +7,7 @@ import pytest
 from skyrisk import db, pipeline
 from skyrisk.config import load_hubs, load_scoring_config
 from skyrisk.ingest import fema_nri, open_meteo
-from skyrisk.ingest.http import get_json
+from skyrisk.ingest.http import get_json, post_json
 
 
 def _load(fixtures, name):
@@ -134,3 +134,17 @@ def test_get_json_honors_retry_after():
     waits = []
     get_json(client, "https://example.test", {}, sleep=waits.append)
     assert waits == [7.0]
+
+
+def test_post_json_sends_body_and_headers_without_retry_when_asked():
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(503)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    with pytest.raises(httpx.HTTPStatusError):
+        post_json(client, "https://example.test", {"a": 1}, {"X-Key": "k"}, retries=0)
+    assert len(seen) == 1
+    assert (seen[0].method, json.loads(seen[0].content), seen[0].headers["X-Key"]) == ("POST", {"a": 1}, "k")

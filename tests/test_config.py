@@ -4,6 +4,7 @@ from pydantic import ValidationError
 
 from skyrisk.config import (
     AgentConfig,
+    ClassifierConfig,
     HubRegistry,
     RateLimitConfig,
     ScoringConfig,
@@ -91,3 +92,37 @@ def test_rate_limit_must_be_positive():
         RateLimitConfig(per_ip_per_hour=0)
     with pytest.raises(ValidationError):
         RateLimitConfig(global_per_day=0)
+
+
+def _classifier(**overrides):
+    data = {"primary": "haiku", "fallback": "jev", "timeout_s": 5.0, "haiku": {"model": "claude-haiku-4-5"},
+            "jev": {"model": "jev-1.13.0", "base_url": "https://jev.test", "injection_threshold": 0.5,
+                    "uncertain_band": [0.4, 0.6]}}
+    return {**data, **overrides}
+
+
+def test_default_classifier_is_haiku_with_jev_fallback(config_dir):
+    c = load_agent_config(config_dir / "agent.yaml").classifier
+    assert c.order == ["haiku", "jev"]
+    assert c.jev.uncertain_band == (0.4, 0.6)
+
+
+@pytest.mark.parametrize("overrides, message", [
+    ({"fallback": "haiku"}, "must differ"),
+    ({"primary": "jev", "fallback": None, "jev": None}, "no jev settings"),
+    ({"jev": {**_classifier()["jev"], "uncertain_band": [0.6, 0.4]}}, "uncertain_band"),
+    ({"jev": {**_classifier()["jev"], "injection_threshold": 1.5}}, "injection_threshold"),
+])
+def test_classifier_config_validation(overrides, message):
+    with pytest.raises(ValidationError, match=message):
+        ClassifierConfig.model_validate(_classifier(**overrides))
+
+
+def test_skyrisk_classifier_env_swaps_primary_and_fallback(config_dir):
+    base = load_agent_config(config_dir / "agent.yaml")
+    assert base.with_env_overrides({"SKYRISK_CLASSIFIER": "jev"}).classifier.order == ["jev", "haiku"]
+    assert base.with_env_overrides({"SKYRISK_CLASSIFIER": "haiku"}).classifier.order == ["haiku", "jev"]
+    env = {"SKYRISK_CLASSIFIER_MODEL": "claude-haiku-9"}
+    assert base.with_env_overrides(env).classifier.haiku.model == "claude-haiku-9"
+    with pytest.raises(ValueError, match="SKYRISK_CLASSIFIER"):
+        base.with_env_overrides({"SKYRISK_CLASSIFIER": "gpt"})
