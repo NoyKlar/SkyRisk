@@ -188,6 +188,8 @@ function renderHubs(hubs) {
   }
   document.getElementById("hubs-panel").hidden = false;
 
+  document.getElementById("hub-count").textContent = `${hubs.length} US hubs`;
+
   const line = document.getElementById("hubs-line");
   line.textContent = "Hubs: " + hubs.map((h) => h.city).join(" · ");
   line.hidden = false;

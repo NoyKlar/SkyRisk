@@ -167,8 +167,17 @@ Run `uv run skyrisk eval --repeat 3` before merging any change to the system pro
    ```
    A removed hub's old rows stay in the local DB but are ignored, because scoring, tools and the system prompt read `config/hubs.yaml`. A Render build always starts from an empty DB.
 3. **Scores are relative.** Every metric is min-max scaled across the hubs (least exposed = 0, most exposed = 100) before weighting. Adding or removing any hub can shift every hub's scores and ranks, not just the new one's.
-4. **Hub count.** The count 13 is currently hard-coded in three places: `src/skyrisk/agent/tools.py`, the welcome line of `src/skyrisk/api/static/index.html`, and `test_hub_registry_loads_13_hubs` in `tests/test_config.py`. It appears in the relative-score caveat and in the `top_n` / `hub_ids` limits. Update those when the number of hubs changes. The system prompt picks up the hub list automatically.
-5. **Evals.** Cases in `evals/cases.yaml` that name hubs, regions or an expected ranking order may need updating. Rerun `uv run skyrisk eval --repeat 3`.
+4. **No code changes are needed.** Everything that depends on the hub count reads it from `config/hubs.yaml`:
+   - the system prompt and the tools' relative-score caveat
+   - `rank_hubs` / `weather_stat`, which have no fixed upper bound on the number of hubs
+   - the chat page's welcome line (via `GET /api/hubs`)
+   - the tests
+   For example, adding Seattle as a 14th hub worked end to end:
+   - ingest took about 3 s for the one new hub
+   - the page showed "14 US hubs"
+   - the agent ranked all 14 and answered a Seattle snow question
+   - every other hub's scores shifted slightly
+5. **Evals.** Cases in `evals/cases.yaml` that name hubs, regions or an expected ranking order may need updating. For example, `unknown-hub` asks about Seattle and expects `needs_clarification`. It fails once Seattle is a real hub, so change it to a city you don't serve. Rerun `uv run skyrisk eval --repeat 3`.
 6. On Render, push the change. The next deploy ingests and scores the new hub list.
 
 ## Project layout

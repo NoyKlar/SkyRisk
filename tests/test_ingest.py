@@ -102,9 +102,9 @@ def test_end_to_end_score_and_persist(fixtures, config_dir):
 
     result = pipeline.compute_scores(conn, registry, config)
     run_id = db.persist_run(conn, result)
-    assert len(result.hubs) == 13
+    assert len(result.hubs) == len(registry.hubs)
     rows = conn.execute("SELECT COUNT(*) FROM metric_values WHERE run_id = ?", (run_id,)).fetchone()[0]
-    assert rows == 13 * sum(len(h.metrics) for h in config.hazards.values())
+    assert rows == len(registry.hubs) * sum(len(h.metrics) for h in config.hazards.values())
     # Unscored metrics (e.g. wind) are still stored per run for stats questions.
     wind = conn.execute(
         "SELECT scored FROM hub_metrics WHERE run_id = ? AND hub_id = 'chicago' AND metric = 'high_wind_days'",

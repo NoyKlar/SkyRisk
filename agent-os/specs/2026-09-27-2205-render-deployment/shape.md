@@ -43,6 +43,12 @@ Roadmap Phase 2, item 6. In the user's words:
   - A per-IP rejection doesn't use up the global quota.
 - **Roadmap:** Deployment stays in Phase 2, marked done.
 - **Wording:** the motivation is written as "a deployed app makes the demo easier to access". Older docs that referred to the original brief were reworded to match: the roadmap entry and the agent-layer spec now say "headline example questions".
+- **Hub count is derived (added after review):** the count 13 is no longer hard-coded.
+  - `tools.relative_caveat(ctx)` and the region caveat use `len(ctx.registry.hubs)`.
+  - The `top_n` and `hub_ids` upper bounds were removed.
+  - The page's welcome line is filled from `GET /api/hubs`.
+  - The tests compare against `config/hubs.yaml`.
+  - Verified by temporarily adding Seattle as a 14th hub: ingest, score, the page, and two live chat questions all worked. The `unknown-hub` eval case (Seattle) failed as expected, which the README now calls out.
 - **Spec numbering:** Spec 6 (spec 5 is the deferred Jev classifier).
 
 ## Context

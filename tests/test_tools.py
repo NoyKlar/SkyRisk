@@ -5,11 +5,11 @@ import pytest
 from conftest import snowy
 from skyrisk.agent.tools import (
     NRI_CAVEAT,
-    RELATIVE_CAVEAT,
     TOOLS,
     RankHubsInput,
     ToolError,
     rank_hubs,
+    relative_caveat,
     run_tool,
     strict_json_schema,
     weather_stat,
@@ -22,7 +22,7 @@ def test_rank_overall_matches_hub_scores_order(tool_ctx):
     db_order = [r["hub_id"] for r in tool_ctx.conn.execute(
         "SELECT hub_id FROM hub_scores WHERE run_id = ? ORDER BY rank", (result.run_id,))]
     assert [r.hub_id for r in result.rows] == db_order
-    assert RELATIVE_CAVEAT in result.caveats and NRI_CAVEAT in result.caveats
+    assert relative_caveat(tool_ctx) in result.caveats and NRI_CAVEAT in result.caveats
 
 
 def test_rank_region_filter_keeps_overall_rank(tool_ctx):
@@ -66,7 +66,7 @@ def test_weather_stat_months_filter(tool_ctx):
 
 
 def test_unknown_hub_is_a_tool_error_not_a_crash(tool_ctx):
-    outcome = run_tool(tool_ctx, "explain_score", {"hub_id": "seattle", "hazard": None})
+    outcome = run_tool(tool_ctx, "explain_score", {"hub_id": "no-such-hub", "hazard": None})
     assert outcome.is_error and "Unknown hub" in outcome.content
 
 
@@ -102,3 +102,15 @@ def test_strict_schema_inlines_nested_models():
     schema = strict_json_schema(AgentAnswer)
     item = schema["properties"]["scores_cited"]["items"]
     assert item["additionalProperties"] is False and set(item["required"]) == {"hub_id", "hazard", "score"}
+
+
+def test_hub_count_follows_the_registry(tool_ctx):
+    n = len(tool_ctx.registry.hubs)
+    assert f"across the {n} hubs" in relative_caveat(tool_ctx)
+    everything = rank_hubs(tool_ctx, RankHubsInput(hazard="overall", top_n=n + 10))
+    assert len(everything.rows) == n
+    midwest = rank_hubs(tool_ctx, RankHubsInput(hazard="winter", region="Midwest"))
+    assert any(f"all {n} hubs" in c for c in midwest.caveats)
+    all_ids = [h.id for h in tool_ctx.registry.hubs]
+    stats = weather_stat(tool_ctx, WeatherStatInput(hub_ids=all_ids, stat="snow_day", unit="pct_days"))
+    assert len(stats.rows) == n

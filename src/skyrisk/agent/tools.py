@@ -26,10 +26,6 @@ Unit = Literal["pct_days", "days_per_year"]
 
 SCORE_DECIMALS = 2
 
-RELATIVE_CAVEAT = (
-    "Scores are relative rankings across the 13 hubs (0 = least exposed hub, "
-    "100 = most exposed hub for that measure), not probabilities of disruption."
-)
 NRI_CAVEAT = (
     "FEMA NRI values describe the whole county containing the hub, not the hub site itself."
 )
@@ -44,6 +40,13 @@ class ToolContext:
     conn: sqlite3.Connection
     registry: HubRegistry
     scoring: ScoringConfig
+
+
+def relative_caveat(ctx: ToolContext) -> str:
+    return (
+        f"Scores are relative rankings across the {len(ctx.registry.hubs)} hubs (0 = least exposed hub, "
+        "100 = most exposed hub for that measure), not probabilities of disruption."
+    )
 
 
 class ScoreRef(BaseModel):
@@ -138,7 +141,7 @@ def list_hubs(ctx: ToolContext, _: ListHubsInput) -> ListHubsResult:
 
 class RankHubsInput(BaseModel):
     hazard: Hazard = Field(description="'overall' or one hazard sub-score")
-    top_n: int | None = Field(default=None, ge=1, le=13, description="Limit rows; null = all")
+    top_n: int | None = Field(default=None, ge=1, description="Limit rows; null = all")
     region: Region | None = Field(default=None, description="Only hubs in this region; null = all")
 
 
@@ -148,7 +151,7 @@ class RankRow(BaseModel):
     region: str
     score: float
     rank: int  # within the region filter (if any)
-    overall_rank: int  # among all 13 hubs for this hazard
+    overall_rank: int  # among all hubs for this hazard
 
 
 class RankHubsResult(ToolResult):
@@ -177,10 +180,11 @@ def rank_hubs(ctx: ToolContext, args: RankHubsInput) -> RankHubsResult:
         )
         for i, h in enumerate(selected, start=1)
     ]
-    caveats = [RELATIVE_CAVEAT, NRI_CAVEAT, _window_caveat(ctx)]
+    caveats = [relative_caveat(ctx), NRI_CAVEAT, _window_caveat(ctx)]
     if args.region:
         caveats.append(
-            f"Filtered to the {args.region} region; scores are still relative to all 13 hubs "
+            f"Filtered to the {args.region} region; scores are still relative to all "
+            f"{len(ctx.registry.hubs)} hubs "
             "(overall_rank shows the position among all hubs)."
         )
     return RankHubsResult(
@@ -241,7 +245,7 @@ def compare_hubs(ctx: ToolContext, args: CompareHubsInput) -> CompareHubsResult:
                                overall_rank=hub["rank"], hazards=hazards))
     return CompareHubsResult(
         run_id=run_id, config_version=version, rows=rows,
-        caveats=[RELATIVE_CAVEAT, NRI_CAVEAT, _window_caveat(ctx)],
+        caveats=[relative_caveat(ctx), NRI_CAVEAT, _window_caveat(ctx)],
     )
 
 
@@ -338,7 +342,7 @@ def explain_score(ctx: ToolContext, args: ExplainScoreInput) -> ExplainScoreResu
 
     county = db.load_nri(ctx.conn, args.hub_id)
     nri = None
-    caveats = [RELATIVE_CAVEAT, NRI_CAVEAT, _window_caveat(ctx)]
+    caveats = [relative_caveat(ctx), NRI_CAVEAT, _window_caveat(ctx)]
     if county:
         nri = NriInfo(
             county=county.county_name, state=county.state, county_fips=county.county_fips,
@@ -367,7 +371,7 @@ def explain_score(ctx: ToolContext, args: ExplainScoreInput) -> ExplainScoreResu
 # --- weather_stat --------------------------------------------------------------------
 
 class WeatherStatInput(BaseModel):
-    hub_ids: list[str] = Field(min_length=1, max_length=13)
+    hub_ids: list[str] = Field(min_length=1)
     stat: Stat
     unit: Unit = Field(description="pct_days = % of days; days_per_year = average days per year")
     months: list[int] | None = Field(default=None, description="Restrict to these months (1-12); null = all")
@@ -465,7 +469,7 @@ class ToolSpec:
 
 
 TOOLS: tuple[ToolSpec, ...] = (
-    ToolSpec("list_hubs", "List the 13 hubs with ids, cities and regions.", ListHubsInput, list_hubs),
+    ToolSpec("list_hubs", "List all hubs with ids, cities and regions.", ListHubsInput, list_hubs),
     ToolSpec(
         "rank_hubs",
         "Rank hubs by the overall risk score or one hazard sub-score (0-100, relative across hubs). "

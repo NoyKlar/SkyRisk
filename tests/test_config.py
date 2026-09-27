@@ -1,4 +1,5 @@
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from skyrisk.config import (
@@ -19,9 +20,10 @@ KNOWN_METRICS = {
 }
 
 
-def test_hub_registry_loads_13_hubs(config_dir):
+def test_hub_registry_loads_every_entry(config_dir):
+    raw = yaml.safe_load((config_dir / "hubs.yaml").read_text())
     registry = load_hubs(config_dir / "hubs.yaml")
-    assert len(registry.hubs) == 13
+    assert [h.id for h in registry.hubs] == [h["id"] for h in raw["hubs"]]
     assert registry.get("minneapolis").state == "MN"
 
 
