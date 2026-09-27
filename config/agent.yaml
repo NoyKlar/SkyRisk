@@ -1,0 +1,17 @@
+# Agent configuration. Model IDs can be overridden with SKYRISK_PRIMARY_MODEL,
+# SKYRISK_FALLBACK_MODEL and SKYRISK_CLASSIFIER_MODEL.
+primary:
+  provider: anthropic
+  model: claude-sonnet-5
+  effort: medium
+fallback:
+  provider: openai
+  model: gpt-6-luna      # cost-efficient tier; function calling + structured outputs via Responses API
+  effort: medium
+classifier:
+  model: claude-haiku-4-5
+  timeout_s: 5.0
+max_tool_rounds: 6
+max_input_chars: 2000
+max_history_turns: 10
+max_output_tokens: 16000

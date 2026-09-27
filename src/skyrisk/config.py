@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -110,9 +111,44 @@ class ScoringConfig(BaseModel):
         return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+class ModelConfig(BaseModel):
+    provider: Literal["anthropic", "openai"]
+    model: str
+    effort: Literal["low", "medium", "high"] = "medium"
+
+
+class ClassifierConfig(BaseModel):
+    model: str
+    timeout_s: float = Field(gt=0)
+
+
+class AgentConfig(BaseModel):
+    primary: ModelConfig
+    fallback: ModelConfig | None = None
+    classifier: ClassifierConfig | None = None
+    max_tool_rounds: int = Field(ge=1)
+    max_input_chars: int = Field(ge=1)
+    max_history_turns: int = Field(ge=1)
+    max_output_tokens: int = Field(ge=1024)
+
+    def with_env_overrides(self, env: Mapping[str, str]) -> AgentConfig:
+        data = self.model_dump()
+        if model := env.get("SKYRISK_PRIMARY_MODEL"):
+            data["primary"]["model"] = model
+        if (model := env.get("SKYRISK_FALLBACK_MODEL")) and data["fallback"]:
+            data["fallback"]["model"] = model
+        if (model := env.get("SKYRISK_CLASSIFIER_MODEL")) and data["classifier"]:
+            data["classifier"]["model"] = model
+        return AgentConfig.model_validate(data)
+
+
 def load_hubs(path: Path) -> HubRegistry:
     return HubRegistry.model_validate(yaml.safe_load(path.read_text()))
 
 
 def load_scoring_config(path: Path) -> ScoringConfig:
     return ScoringConfig.model_validate(yaml.safe_load(path.read_text()))
+
+
+def load_agent_config(path: Path) -> AgentConfig:
+    return AgentConfig.model_validate(yaml.safe_load(path.read_text()))

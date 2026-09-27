@@ -1,9 +1,7 @@
 # Standards for Data + Scoring Core
 
-No standards are defined yet (`agent-os/standards/index.yml` is empty).
+When this spec was written, no standards existed yet. These were later drawn from this spec's code with `/discover-standards`:
 
-After this spec is implemented, run `/discover-standards` to capture conventions established here, e.g.:
-- Pydantic models for all external data and config
-- Pure scoring functions with no I/O
-- Plain `sqlite3` with an idempotent schema
-- No live network in tests
+- `agent-os/standards/backend/external-api-clients.md`
+- `agent-os/standards/testing/no-live-network.md`
+- `agent-os/standards/testing/injectable-side-effects.md`
