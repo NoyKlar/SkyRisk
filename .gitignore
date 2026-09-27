@@ -4,3 +4,7 @@ data/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+evals/results/*
+!evals/results/latest.md
+!evals/results/latest.json

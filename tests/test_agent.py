@@ -28,6 +28,7 @@ def test_tool_loop_then_grounded_answer(tool_ctx):
     reply = agent.ask(Conversation(), "Which hubs are worst for winter?")
     assert reply.status == "answered" and reply.served_by == "fake:primary"
     assert reply.tools_used == ["rank_hubs"]
+    assert reply.tool_calls == [{"name": "rank_hubs", "arguments": {"hazard": "winter", "top_n": 3, "region": None}}]
     results = provider.received[1]["tool_results"]
     assert results[0].is_error is False and hub in results[0].content
 

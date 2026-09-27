@@ -1,10 +1,12 @@
-"""Command-line entry point: `skyrisk ingest | score | show | chat`."""
+"""Command-line entry point: `skyrisk ingest | score | show | chat | serve | eval`."""
 
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import httpx
@@ -15,6 +17,9 @@ from skyrisk.agent.core import Conversation
 from skyrisk.agent.factory import AgentSetupError, build_agent
 from skyrisk.agent.tools import ExplainScoreInput, ToolContext, ToolError, explain_score
 from skyrisk.config import load_hubs, load_scoring_config
+from skyrisk.evals.cases import load_cases
+from skyrisk.evals.report import write_reports
+from skyrisk.evals.runner import EvalMeta, run_evals
 
 HTTP_TIMEOUT_S = 60.0
 
@@ -40,6 +45,14 @@ def _parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="run the chat web page and JSON API")
     serve.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"), help="bind address (default: $HOST or 127.0.0.1)")
     serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")), help="port (default: $PORT or 8000)")
+
+    ev = sub.add_parser("eval", help="run the eval cases against the real agent (uses API credits); "
+                                     "exits 1 if any case fails")
+    ev.add_argument("--cases", type=Path, default=Path("evals/cases.yaml"), help="eval cases file")
+    ev.add_argument("--repeat", type=int, default=1, metavar="N", help="runs per case; a case passes only if all pass")
+    ev.add_argument("--case", action="append", dest="case_globs", metavar="GLOB", help="only case ids matching (repeatable)")
+    ev.add_argument("--category", action="append", dest="categories", metavar="NAME", help="only this category (repeatable)")
+    ev.add_argument("--out", type=Path, default=Path("evals/results"), help="report directory")
     return p
 
 
@@ -159,6 +172,48 @@ def _serve(ctx: ToolContext, config_dir: Path, host: str, port: int) -> int:
     return 0
 
 
+def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
+    """Exit codes: 0 = every case passed, 1 = at least one case failed, 2 = setup error."""
+    cases = load_cases(args.cases)
+    if args.case_globs:
+        cases = [c for c in cases if any(fnmatch.fnmatch(c.id, g) for g in args.case_globs)]
+    if args.categories:
+        cases = [c for c in cases if c.category in args.categories]
+    if not cases:
+        print("No eval cases match the filters.", file=sys.stderr)
+        return 2
+    if args.repeat < 1:
+        print("--repeat must be at least 1.", file=sys.stderr)
+        return 2
+    run_id = db.latest_run_id(ctx.conn)
+    if run_id is None:
+        print("No score run exists yet; run `skyrisk ingest` and `skyrisk score` first.", file=sys.stderr)
+        return 2
+    built = _build_agent(ctx.conn, config_dir)
+    if built is None:
+        return 2
+    agent, config = built
+
+    started = datetime.now().astimezone()
+    meta = EvalMeta(
+        started_at=started.isoformat(timespec="seconds"),
+        primary_model=f"{config.primary.provider}:{config.primary.model}",
+        fallback_model=f"{config.fallback.provider}:{config.fallback.model}" if config.fallback else None,
+        classifier_model=config.classifier.model if config.classifier else None,
+        score_run_id=run_id,
+        scoring_config_version=ctx.scoring.version,
+    )
+    print(f"Running {len(cases)} case(s) x {args.repeat} against {meta.primary_model}...")
+    report = run_evals(agent, cases, ctx, meta, repeat=args.repeat)
+    path = write_reports(report, args.out, started.strftime("%Y%m%d-%H%M%S"))
+    g = report.guardrails
+    print(f"\n{report.cases_passed}/{len(report.cases)} cases passed | "
+          f"guardrail false positives {g.in_scope_refused}/{g.in_scope_runs} | "
+          f"misses {g.must_refuse_answered}/{g.must_refuse_runs} | p50 {report.latency.p50_s:.1f}s")
+    print(f"Report: {path} (also {args.out / 'latest.md'})")
+    return 0 if report.passed else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     registry = load_hubs(args.config_dir / "hubs.yaml")
@@ -181,6 +236,8 @@ def main(argv: list[str] | None = None) -> int:
             return _chat(conn, args.config_dir, args.question)
         elif args.command == "serve":
             return _serve(ToolContext(conn, registry, config), args.config_dir, args.host, args.port)
+        elif args.command == "eval":
+            return _eval(ToolContext(conn, registry, config), args.config_dir, args)
     finally:
         conn.close()
     return 0

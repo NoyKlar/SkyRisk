@@ -53,6 +53,7 @@ class AgentReply:
     hubs: list[str] = field(default_factory=list)
     served_by: str | None = None
     tools_used: list[str] = field(default_factory=list)
+    tool_calls: list[dict] = field(default_factory=list)  # {"name", "arguments"} per call, in order
     guardrail: str | None = None  # which layer refused, if any
     warnings: list[str] = field(default_factory=list)
 
@@ -77,6 +78,7 @@ class Conversation:
 @dataclass
 class _TurnState:
     tools_used: list[str] = field(default_factory=list)
+    tool_calls: list[dict] = field(default_factory=list)
     scores: list[ScoreRef] = field(default_factory=list)
     tool_json: list[str] = field(default_factory=list)
 
@@ -168,7 +170,7 @@ class Agent:
             if corrections >= MAX_CORRECTIONS:
                 self._log(f"warning: answer rejected after correction: {problems}")
                 return AgentReply("error", UNVERIFIED_MESSAGE, served_by=provider.name,
-                                  tools_used=state.tools_used, warnings=problems)
+                                  tools_used=state.tools_used, tool_calls=state.tool_calls, warnings=problems)
             corrections += 1
             step = session.step(None, allow_tools=rounds < self._max_tool_rounds, feedback=(
                 "Your previous answer was rejected by validation:\n- " + "\n- ".join(problems)
@@ -181,6 +183,7 @@ class Agent:
         for call in calls:
             outcome = run_tool(self._ctx, call.name, call.arguments)
             state.tools_used.append(call.name)
+            state.tool_calls.append({"name": call.name, "arguments": call.arguments})
             if outcome.result is not None:
                 state.scores += outcome.result.scores()
                 state.tool_json.append(outcome.content)
@@ -208,4 +211,5 @@ class Agent:
             hubs=answer.hubs_referenced,
             served_by=provider.name,
             tools_used=state.tools_used,
+            tool_calls=state.tool_calls,
         )
