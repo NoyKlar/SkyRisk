@@ -159,3 +159,15 @@ def test_retry_helper_reraises_fatal():
 def test_adapters_disable_sdk_retries():
     assert ap.AnthropicProvider(anthropic.Anthropic(api_key="x"), "m").client.max_retries == 0
     assert op.OpenAIProvider(openai.OpenAI(api_key="x"), "m").client.max_retries == 0
+
+
+def test_usage_is_recorded_per_call_without_double_counting_cache():
+    a = SimpleNamespace(usage=SimpleNamespace(input_tokens=86, output_tokens=900, cache_read_input_tokens=3139,
+                                              cache_creation_input_tokens=0))
+    u = ap.usage_of(a, "claude-sonnet-5")
+    assert (u.input_tokens, u.cache_read_tokens, u.cache_write_tokens, u.output_tokens) == (86, 3139, 0, 900)
+
+    o = SimpleNamespace(usage=SimpleNamespace(input_tokens=5000, output_tokens=700,
+                                              input_tokens_details=SimpleNamespace(cached_tokens=3000)))
+    u = op.usage_of(o, "gpt-6-luna")
+    assert (u.input_tokens, u.cache_read_tokens, u.output_tokens) == (2000, 3000, 700)

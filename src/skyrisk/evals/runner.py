@@ -10,9 +10,11 @@ from collections.abc import Callable
 from pydantic import BaseModel, computed_field
 
 from skyrisk.agent.core import Agent, Conversation, Log
+from skyrisk.agent.providers.base import CallUsage
 from skyrisk.agent.tools import ToolContext
 from skyrisk.evals.cases import EvalCase
 from skyrisk.evals.checks import check_run, refusing_layer
+from skyrisk.evals.pricing import total_cost
 
 REFUSALS = ("refused_off_topic", "refused_injection")
 
@@ -24,6 +26,7 @@ class EvalMeta(BaseModel):
     classifier_model: str | None
     score_run_id: int
     scoring_config_version: str
+    simulated_outage: str | None = None  # provider forced down for this run, e.g. "anthropic"
 
 
 class RunResult(BaseModel):
@@ -34,6 +37,8 @@ class RunResult(BaseModel):
     served_by: str | None
     refused_by: str | None
     tools: list[str]
+    warnings: list[str] = []
+    usage: list[CallUsage] = []
 
 
 class CaseResult(BaseModel):
@@ -91,6 +96,18 @@ class LatencyStats(BaseModel):
     max_s: float
 
 
+class ReliabilityStats(BaseModel):
+    error_runs: int              # replies with status "error" (unverified answer, unusable response, all providers down)
+    grounding_failures: int      # answered runs whose cited scores failed the eval's independent DB re-check
+
+
+class CostStats(BaseModel):
+    total_usd: float             # priced calls only
+    per_run_usd: float
+    calls_by_model: dict[str, int]
+    unpriced_models: list[str]   # models with no price; their calls are not in total_usd
+
+
 class EvalReport(BaseModel):
     meta: EvalMeta
     repeat: int
@@ -99,6 +116,8 @@ class EvalReport(BaseModel):
     guardrails: GuardrailStats
     latency: LatencyStats
     served_by: dict[str, int]
+    reliability: ReliabilityStats | None = None
+    cost: CostStats | None = None
 
     @computed_field
     @property
@@ -122,7 +141,7 @@ def _run_once(agent: Agent, case: EvalCase, ctx: ToolContext, now: Callable[[], 
     reasons = check_run(case, reply, ctx)
     return RunResult(status=reply.status, passed=not reasons, reasons=reasons, latency_s=latency,
                      served_by=reply.served_by, refused_by=refusing_layer(reply),
-                     tools=list(dict.fromkeys(reply.tools_used)))
+                     tools=list(dict.fromkeys(reply.tools_used)), warnings=reply.warnings, usage=reply.usage)
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:
@@ -169,5 +188,13 @@ def _aggregate(meta: EvalMeta, repeat: int, results: list[CaseResult]) -> EvalRe
     latency = LatencyStats(p50_s=_percentile(latencies, 50), p95_s=_percentile(latencies, 95),
                            max_s=latencies[-1] if latencies else 0.0)
     served_by = dict(Counter(r.served_by or "none (refused before the agent model)" for r in runs))
+    reliability = ReliabilityStats(
+        error_runs=sum(r.status == "error" for r in runs),
+        grounding_failures=sum(any(x.startswith("grounding:") for x in r.reasons) for r in runs),
+    )
+    usage = [u for r in runs for u in r.usage]
+    total, unpriced = total_cost(usage)
+    cost = CostStats(total_usd=total, per_run_usd=total / len(runs) if runs else 0.0,
+                     calls_by_model=dict(Counter(u.model for u in usage)), unpriced_models=unpriced)
     return EvalReport(meta=meta, repeat=repeat, cases=results, categories=categories, guardrails=guardrails,
-                      latency=latency, served_by=served_by)
+                      latency=latency, served_by=served_by, reliability=reliability, cost=cost)

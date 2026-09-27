@@ -174,3 +174,38 @@ def test_classifier_failure_never_blocks(tool_ctx, error):
     reply = agent.ask(Conversation(), "Which hub is riskiest?")
     assert reply.status == "answered" and "classifier skipped" in reply.warnings
     assert any("classifier fake:classifier unavailable" in m for m in logs)
+
+
+# --- simulated outage ---------------------------------------------------------------------
+
+def test_simulated_anthropic_outage_takes_the_real_outage_path(tool_ctx):
+    from skyrisk.agent.factory import _DownClassifier, _DownProvider
+
+    fallback = FakeProvider(script=[answer("answered by the fallback")], name="fake:openai")
+    agent, logs = _agent(tool_ctx, _DownProvider("anthropic:claude-sonnet-5"), fallback,
+                         classifier=_DownClassifier("anthropic:claude-haiku-4-5"))
+    reply = agent.ask(Conversation(), "Which hub is riskiest?")
+    assert (reply.status, reply.served_by) == ("answered", "fake:openai")
+    assert reply.warnings == ["classifier skipped", "anthropic:claude-sonnet-5 unavailable"]
+    assert any("simulated outage" in m for m in logs)
+
+
+def test_build_agent_with_simulated_outage_needs_only_the_fallback_key(tool_ctx, config_dir):
+    from skyrisk.agent.factory import AgentSetupError, _DownClassifier, _DownProvider, build_agent
+
+    agent, _ = build_agent(tool_ctx.conn, config_dir, {"OPENAI_API_KEY": "x"}, log=lambda m: None,
+                           simulate_outage="anthropic")
+    primary, fallback = agent._providers
+    assert isinstance(primary, _DownProvider) and fallback.name == "openai:gpt-6-luna"
+    assert isinstance(agent._classifier, _DownClassifier)
+    with pytest.raises(AgentSetupError, match="no configured provider can answer"):
+        build_agent(tool_ctx.conn, config_dir, {}, log=lambda m: None, simulate_outage="anthropic")
+
+
+def test_reply_carries_classifier_and_model_usage(tool_ctx):
+    from skyrisk.agent.providers.base import CallUsage
+
+    usage = CallUsage(model="claude-haiku-4-5", input_tokens=400, output_tokens=50)
+    classifier = _Classifier(Verdict(label="in_scope", reason="ok", usage=[usage]))
+    agent, _ = _agent(tool_ctx, FakeProvider(script=[answer("fine")]), classifier=classifier)
+    assert agent.ask(Conversation(), "Which hub is riskiest?").usage == [usage]

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from skyrisk.agent import guardrails
 from skyrisk.agent.providers.base import (
+    CallUsage,
     HistoryTurn,
     LLMProvider,
     ProviderMisconfigured,
@@ -56,6 +57,7 @@ class AgentReply:
     tool_calls: list[dict] = field(default_factory=list)  # {"name", "arguments"} per call, in order
     guardrail: str | None = None  # which layer refused, if any
     warnings: list[str] = field(default_factory=list)
+    usage: list[CallUsage] = field(default_factory=list)  # every model call behind this reply, for cost accounting
 
 
 @dataclass
@@ -81,6 +83,7 @@ class _TurnState:
     tool_calls: list[dict] = field(default_factory=list)
     scores: list[ScoreRef] = field(default_factory=list)
     tool_json: list[str] = field(default_factory=list)
+    usage: list[CallUsage] = field(default_factory=list)
 
 
 class Agent:
@@ -122,10 +125,13 @@ class Agent:
                               guardrail=f"input: {rejection.detail}")
 
         verdict = guardrails.safe_classify(self._classifier, question, self._log)
+        classifier_usage = list(verdict.usage) if verdict is not None else []
         if verdict is not None and verdict.label == "off_topic":
-            return AgentReply("refused_off_topic", OFF_TOPIC_MESSAGE, guardrail=f"classifier: {verdict.reason}")
+            return AgentReply("refused_off_topic", OFF_TOPIC_MESSAGE, guardrail=f"classifier: {verdict.reason}",
+                              usage=classifier_usage)
         if verdict is not None and verdict.label == "injection":
-            return AgentReply("refused_injection", INJECTION_MESSAGE, guardrail=f"classifier: {verdict.reason}")
+            return AgentReply("refused_injection", INJECTION_MESSAGE, guardrail=f"classifier: {verdict.reason}",
+                              usage=classifier_usage)
 
         warnings = [] if verdict is not None or self._classifier is None else ["classifier skipped"]
         for provider in self._providers:
@@ -143,15 +149,16 @@ class Agent:
             except ProviderResponseError as e:
                 self._log(f"warning: {provider.name} returned an unusable response: {e}")
                 return AgentReply("error", UNVERIFIED_MESSAGE, served_by=provider.name,
-                                  warnings=warnings + [str(e)])
+                                  warnings=warnings + [str(e)], usage=classifier_usage)
             reply.warnings = warnings + reply.warnings
+            reply.usage = classifier_usage + reply.usage
             return reply
-        return AgentReply("error", UNAVAILABLE_MESSAGE, warnings=warnings)
+        return AgentReply("error", UNAVAILABLE_MESSAGE, warnings=warnings, usage=classifier_usage)
 
     def _run_turn(self, provider: LLMProvider, conversation: Conversation, question: str) -> AgentReply:
         session = provider.start_turn(self._system, conversation.history, question, self._tools,
                                       self._answer_schema)
-        state = _TurnState()
+        state = _TurnState(usage=getattr(session, "usage", []))  # the session appends as it calls
         step = session.step(None)
         rounds = 0
         corrections = 0
@@ -170,7 +177,8 @@ class Agent:
             if corrections >= MAX_CORRECTIONS:
                 self._log(f"warning: answer rejected after correction: {problems}")
                 return AgentReply("error", UNVERIFIED_MESSAGE, served_by=provider.name,
-                                  tools_used=state.tools_used, tool_calls=state.tool_calls, warnings=problems)
+                                  tools_used=state.tools_used, tool_calls=state.tool_calls, warnings=problems,
+                                  usage=list(state.usage))
             corrections += 1
             step = session.step(None, allow_tools=rounds < self._max_tool_rounds, feedback=(
                 "Your previous answer was rejected by validation:\n- " + "\n- ".join(problems)
@@ -212,4 +220,5 @@ class Agent:
             served_by=provider.name,
             tools_used=state.tools_used,
             tool_calls=state.tool_calls,
+            usage=list(state.usage),
         )

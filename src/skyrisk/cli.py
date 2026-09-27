@@ -14,7 +14,14 @@ from dotenv import load_dotenv
 
 from skyrisk import db, pipeline
 from skyrisk.agent.core import Conversation
-from skyrisk.agent.factory import CLASSIFIER_KEYS, AgentSetupError, build_agent, build_classifier, build_classifiers
+from skyrisk.agent.factory import (
+    CLASSIFIER_KEYS,
+    OUTAGE_VENDORS,
+    AgentSetupError,
+    build_agent,
+    build_classifier,
+    build_classifiers,
+)
 from skyrisk.agent.tools import ExplainScoreInput, ToolContext, ToolError, explain_score
 from skyrisk.config import CLASSIFIER_NAMES, load_agent_config, load_hubs, load_scoring_config
 from skyrisk.evals import classifier_bench
@@ -42,6 +49,8 @@ def _parser() -> argparse.ArgumentParser:
 
     chat = sub.add_parser("chat", help="ask the SkyRisk agent questions (interactive)")
     chat.add_argument("--question", "-q", help="answer one question and exit")
+    chat.add_argument("--simulate-outage", choices=OUTAGE_VENDORS, metavar="VENDOR",
+                      help="make every model from VENDOR (anthropic|openai) fail, to test the outage path")
 
     serve = sub.add_parser("serve", help="run the chat web page and JSON API")
     serve.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"), help="bind address (default: $HOST or 127.0.0.1)")
@@ -54,6 +63,9 @@ def _parser() -> argparse.ArgumentParser:
     ev.add_argument("--case", action="append", dest="case_globs", metavar="GLOB", help="only case ids matching (repeatable)")
     ev.add_argument("--category", action="append", dest="categories", metavar="NAME", help="only this category (repeatable)")
     ev.add_argument("--out", type=Path, default=Path("evals/results"), help="report directory")
+    ev.add_argument("--simulate-outage", choices=OUTAGE_VENDORS, metavar="VENDOR",
+                    help="make every model from VENDOR (anthropic|openai) fail, e.g. anthropic: OpenAI answers and "
+                         "the classifier is skipped; reports go to <VENDOR>-outage-*")
 
     ec = sub.add_parser("eval-classifier", help="benchmark the guardrail classifiers directly on the guardrail "
                                                 "eval cases (uses API credits unless --dry-run)")
@@ -132,17 +144,19 @@ def _log(msg: str) -> None:
     print(f"{style}{msg}\033[0m", file=sys.stderr)
 
 
-def _build_agent(conn, config_dir: Path):
+def _build_agent(conn, config_dir: Path, simulate_outage: str | None = None):
     load_dotenv()
+    if simulate_outage:
+        _log(f"SIMULATED OUTAGE: every {simulate_outage} model fails on every call")
     try:
-        return build_agent(conn, config_dir, os.environ, log=_log)
+        return build_agent(conn, config_dir, os.environ, log=_log, simulate_outage=simulate_outage)
     except AgentSetupError as e:
         print(f"{e} Set it in .env (see .env.example).", file=sys.stderr)
         return None
 
 
-def _chat(conn, config_dir: Path, question: str | None) -> int:
-    built = _build_agent(conn, config_dir)
+def _chat(conn, config_dir: Path, question: str | None, simulate_outage: str | None = None) -> int:
+    built = _build_agent(conn, config_dir, simulate_outage)
     if built is None:
         return 1
     agent, config = built
@@ -203,7 +217,7 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
     if run_id is None:
         print("No score run exists yet; run `skyrisk ingest` and `skyrisk score` first.", file=sys.stderr)
         return 2
-    built = _build_agent(ctx.conn, config_dir)
+    built = _build_agent(ctx.conn, config_dir, args.simulate_outage)
     if built is None:
         return 2
     agent, config = built
@@ -213,26 +227,32 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
         started_at=started.isoformat(timespec="seconds"),
         primary_model=f"{config.primary.provider}:{config.primary.model}",
         fallback_model=f"{config.fallback.provider}:{config.fallback.model}" if config.fallback else None,
-        classifier_model=_classifier_description(config),
+        classifier_model=_classifier_description(config, args.simulate_outage),
         score_run_id=run_id,
         scoring_config_version=ctx.scoring.version,
+        simulated_outage=args.simulate_outage,
     )
-    print(f"Running {len(cases)} case(s) x {args.repeat} against {meta.primary_model}...")
+    target = (f"a simulated {args.simulate_outage} outage (answering: {meta.fallback_model})"
+              if args.simulate_outage else meta.primary_model)
+    print(f"Running {len(cases)} case(s) x {args.repeat} against {target}...")
     report = run_evals(agent, cases, ctx, meta, repeat=args.repeat)
-    path = write_reports(report, args.out, started.strftime("%Y%m%d-%H%M%S"))
+    prefix = f"{args.simulate_outage}-outage-" if args.simulate_outage else ""
+    path = write_reports(report, args.out, started.strftime("%Y%m%d-%H%M%S"), prefix)
     g = report.guardrails
     print(f"\n{report.cases_passed}/{len(report.cases)} cases passed | "
           f"guardrail false positives {g.in_scope_refused}/{g.in_scope_runs} | "
           f"misses {g.must_refuse_answered}/{g.must_refuse_runs} | p50 {report.latency.p50_s:.1f}s")
-    print(f"Report: {path} (also {args.out / 'latest.md'})")
+    if report.cost is not None:
+        print(f"Estimated cost: ${report.cost.total_usd:.3f} ({', '.join(f'{k}: {v}' for k, v in report.cost.calls_by_model.items())})")
+    print(f"Report: {path} (also {args.out / f'{prefix}latest.md'})")
     return 0 if report.passed else 1
 
 
-def _classifier_description(config) -> str | None:
+def _classifier_description(config, simulate_outage: str | None = None) -> str | None:
     """The classifier chain as built for this run, e.g. `anthropic:claude-haiku-4-5`."""
     if config.classifier is None:
         return None
-    chain = build_classifier(config.classifier, os.environ, log=lambda m: None)
+    chain = build_classifier(config.classifier, os.environ, log=lambda m: None, down=simulate_outage)
     return chain.name if chain else None
 
 
@@ -304,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "show":
             return _show(ToolContext(conn, registry, config), args.hub_id)
         elif args.command == "chat":
-            return _chat(conn, args.config_dir, args.question)
+            return _chat(conn, args.config_dir, args.question, args.simulate_outage)
         elif args.command == "serve":
             return _serve(ToolContext(conn, registry, config), args.config_dir, args.host, args.port)
         elif args.command == "eval":

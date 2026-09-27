@@ -10,6 +10,7 @@ from typing import Any
 import openai
 
 from skyrisk.agent.providers.base import (
+    CallUsage,
     DEFAULT_RETRIES,
     ErrorKind,
     HistoryTurn,
@@ -55,6 +56,15 @@ def to_tool_outputs(results: list[ToolResultMsg]) -> list[dict[str, Any]]:
 def text_format(answer_schema: dict[str, Any]) -> dict[str, Any]:
     return {"format": {"type": "json_schema", "name": "agent_answer",
                        "schema": answer_schema, "strict": True}}
+
+
+def usage_of(response: Any, model: str) -> CallUsage:
+    """Responses API usage: input_tokens includes cached tokens; output_tokens includes reasoning."""
+    u = response.usage
+    details = getattr(u, "input_tokens_details", None)
+    cached = (getattr(details, "cached_tokens", None) or 0) if details is not None else 0
+    return CallUsage(model=model, input_tokens=u.input_tokens - cached, output_tokens=u.output_tokens,
+                     cache_read_tokens=cached)
 
 
 def parse_response(response: Any) -> Step:
@@ -111,6 +121,7 @@ class _Session:
         self._input = items
         self._tools = tools
         self._text = text_format(answer_schema)
+        self.usage: list[CallUsage] = []  # every call in this turn, for cost accounting
 
     def step(self, tool_results: list[ToolResultMsg] | None, *, allow_tools: bool = True,
              feedback: str | None = None) -> Step:
@@ -133,6 +144,7 @@ class _Session:
             ),
             classify_error, name=self._p.name, retries=self._p.retries, sleep=self._p.sleep,
         )
+        self.usage.append(usage_of(response, self._p.model))
         # Carry reasoning + function_call items forward within the turn.
         self._input += [item.model_dump(mode="json", exclude_none=True) for item in response.output]
         return parse_response(response)

@@ -12,6 +12,7 @@ from typing import Any, Literal, Protocol
 import anthropic
 from pydantic import BaseModel, Field
 
+from skyrisk.agent.providers.base import CallUsage
 from skyrisk.agent.schema import AgentAnswer
 from skyrisk.agent.tools import ScoreRef
 
@@ -66,12 +67,6 @@ class LabelOutput(BaseModel):
 
     label: Label
     reason: str
-
-
-class CallUsage(BaseModel):
-    model: str
-    input_tokens: int
-    output_tokens: int
 
 
 class Verdict(BaseModel):

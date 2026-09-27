@@ -248,3 +248,26 @@ def test_expected_label_requires_a_single_classifier_label():
         classifier_bench.expected_label(_case(expect="needs_clarification"))
     assert not classifier_bench.has_expected_label(_case(expect="needs_clarification"))
     assert classifier_bench.has_expected_label(_case(expect=["answered", "needs_clarification"]))
+
+
+
+def test_pricing_counts_cache_tokens_and_flags_unpriced_models():
+    from skyrisk.agent.providers.base import CallUsage
+    from skyrisk.evals.pricing import total_cost
+
+    usage = [CallUsage(model="gpt-6-luna", input_tokens=1_000_000, output_tokens=1_000_000,
+                       cache_read_tokens=1_000_000),
+             CallUsage(model="mystery-1", input_tokens=5, output_tokens=5)]
+    total, unpriced = total_cost(usage)
+    assert total == pytest.approx(0.10 + 0.50 + 0.01)
+    assert unpriced == ["mystery-1"]
+
+
+def test_outage_report_uses_its_own_prefix_and_shows_cost(tool_ctx, tmp_path):
+    report = _run(tool_ctx, [])
+    report.meta.simulated_outage = "anthropic"
+    path = write_reports(report, tmp_path, "20260928-090000", prefix="anthropic-outage-")
+    assert path.name == "anthropic-outage-20260928-090000.md"
+    text = (tmp_path / "anthropic-outage-latest.md").read_text()
+    assert "Simulated outage: `anthropic`" in text and "## Cost" in text
+    assert "| Error replies" in text and not (tmp_path / "latest.md").exists()

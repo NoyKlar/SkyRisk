@@ -9,6 +9,7 @@ from typing import Any
 import anthropic
 
 from skyrisk.agent.providers.base import (
+    CallUsage,
     DEFAULT_RETRIES,
     ErrorKind,
     HistoryTurn,
@@ -49,6 +50,13 @@ def to_tool_results(results: list[ToolResultMsg]) -> dict[str, Any]:
             for r in results
         ],
     }
+
+
+def usage_of(response: Any, model: str) -> CallUsage:
+    u = response.usage
+    return CallUsage(model=model, input_tokens=u.input_tokens, output_tokens=u.output_tokens,
+                     cache_read_tokens=getattr(u, "cache_read_input_tokens", None) or 0,
+                     cache_write_tokens=getattr(u, "cache_creation_input_tokens", None) or 0)
 
 
 def parse_response(response: Any) -> Step | None:
@@ -107,6 +115,7 @@ class _Session:
         self._messages = messages
         self._tools = tools
         self._schema = answer_schema
+        self.usage: list[CallUsage] = []  # every call in this turn, for cost accounting
 
     def step(self, tool_results: list[ToolResultMsg] | None, *, allow_tools: bool = True,
              feedback: str | None = None) -> Step:
@@ -116,6 +125,7 @@ class _Session:
             self._messages.append({"role": "user", "content": feedback})
         for _ in range(MAX_PAUSE_CONTINUATIONS + 1):
             response = self._call(allow_tools)
+            self.usage.append(usage_of(response, self._p.model))
             # Append full content (incl. thinking blocks) to keep the turn valid.
             self._messages.append({"role": "assistant", "content": response.content})
             step = parse_response(response)

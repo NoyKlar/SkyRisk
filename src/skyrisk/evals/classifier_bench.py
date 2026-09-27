@@ -16,17 +16,11 @@ from pydantic import BaseModel, computed_field
 
 from skyrisk.agent.guardrails import CallUsage, Classifier, Log, check_input
 from skyrisk.evals.cases import EvalCase
+from skyrisk.evals.pricing import PRICES, call_cost
 
 DEFAULT_CATEGORIES = ("injection", "off_topic", "false_positive", "hebrew")
 EXPECTED_LABEL = {"answered": "in_scope", "refused_off_topic": "off_topic", "refused_injection": "injection"}
 
-# USD per million tokens (input, output).
-# Haiku 4.5: Anthropic API price list (claude-api skill model table, cached 2026-06-24).
-# Jev 1.13: docs.typesafe.ai pricing (checked 2026-09-27); output tokens are free.
-PRICES: dict[str, tuple[float, float]] = {
-    "claude-haiku-4-5": (1.00, 5.00),
-    "jev-1.13.0": (0.042, 0.0),
-}
 # Rough per-call token counts, used only by the dry-run cost estimate. Jev: the recorded fixture call.
 ESTIMATED_TOKENS: dict[str, tuple[int, int]] = {"haiku": (600, 60), "jev": (500, 40)}
 
@@ -144,8 +138,7 @@ def estimate(cases: list[EvalCase], keys: list[str], repeat: int, *, escalation_
 
 
 def _price(model: str, input_tokens: int, output_tokens: int) -> float:
-    per_in, per_out = PRICES[model]
-    return (input_tokens * per_in + output_tokens * per_out) / 1_000_000
+    return call_cost(CallUsage(model=model, input_tokens=input_tokens, output_tokens=output_tokens))
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:

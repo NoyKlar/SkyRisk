@@ -7,11 +7,23 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, TypeVar
 
+from pydantic import BaseModel
+
 T = TypeVar("T")
 ErrorKind = Literal["transient", "misconfigured", "fatal"]
 
 DEFAULT_RETRIES = 2
 DEFAULT_BACKOFF_S = 1.0
+
+
+class CallUsage(BaseModel):
+    """Tokens billed for one model call. `input_tokens` excludes cache reads and writes."""
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
 
 
 class ProviderUnavailable(Exception):

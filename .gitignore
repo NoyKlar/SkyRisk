@@ -10,3 +10,5 @@ evals/results/*
 !evals/results/latest.json
 !evals/results/classifier-latest.md
 !evals/results/classifier-latest.json
+!evals/results/anthropic-outage-latest.md
+!evals/results/anthropic-outage-latest.json

@@ -27,6 +27,9 @@ def render_markdown(report: EvalReport) -> str:
         f"- Primary model: `{m.primary_model}`, fallback: `{m.fallback_model or 'none'}`, "
         f"classifier: `{m.classifier_model or 'none'}`",
         f"- Score run: {m.score_run_id} (scoring config v{m.scoring_config_version})",
+        *([f"- **Simulated outage: `{m.simulated_outage}`.** Every {m.simulated_outage}-backed model (answering "
+           "provider and classifier) fails on every call, so the agent takes its real outage path: the classifier "
+           "is skipped and the turn falls back to the next provider."] if m.simulated_outage else []),
         "",
         "## By category",
         "",
@@ -49,6 +52,11 @@ def render_markdown(report: EvalReport) -> str:
         f"| Miss rate (off-topic / injection runs answered) | {g.must_refuse_answered}/{g.must_refuse_runs} "
         f"({_pct(g.must_refuse_answered, g.must_refuse_runs)}) |",
     ]
+
+    if report.reliability is not None:
+        rel = report.reliability
+        lines += [f"| Error replies (unverified answer, unusable response, no provider) | {rel.error_runs} |",
+                  f"| Grounding failures (cited score differs from the DB) | {rel.grounding_failures} |"]
 
     failed = [c for c in report.cases if not c.passed]
     lines += ["", "## Failures", ""]
@@ -86,15 +94,24 @@ def render_markdown(report: EvalReport) -> str:
 
     lines += ["", "## Models used", "", "| Served by | Runs |", "|---|---|"]
     lines += [f"| {k} | {v} |" for k, v in sorted(report.served_by.items(), key=lambda kv: -kv[1])]
+
+    if report.cost is not None:
+        c = report.cost
+        calls = ", ".join(f"{k}: {v}" for k, v in sorted(c.calls_by_model.items())) or "none"
+        lines += ["", "## Cost", "",
+                  f"Estimated **${c.total_usd:.3f}** for all runs (${c.per_run_usd:.4f} per run), from recorded "
+                  f"token usage and `src/skyrisk/evals/pricing.py`. Model calls: {calls}."]
+        if c.unpriced_models:
+            lines.append(f"Not included (no price): {', '.join(c.unpriced_models)}.")
     return "\n".join(lines).rstrip() + "\n"
 
 
-def write_reports(report: EvalReport, out_dir: Path, stamp: str) -> Path:
-    """Write the timestamped report and overwrite latest.*; returns the timestamped Markdown path."""
+def write_reports(report: EvalReport, out_dir: Path, stamp: str, prefix: str = "") -> Path:
+    """Write <prefix><stamp>.* and overwrite <prefix>latest.*; returns the timestamped Markdown path."""
     out_dir.mkdir(parents=True, exist_ok=True)
     markdown = render_markdown(report)
     data = report.model_dump_json(indent=2) + "\n"
-    for name in (stamp, "latest"):
+    for name in (f"{prefix}{stamp}", f"{prefix}latest"):
         (out_dir / f"{name}.md").write_text(markdown, encoding="utf-8")
         (out_dir / f"{name}.json").write_text(data, encoding="utf-8")
-    return out_dir / f"{stamp}.md"
+    return out_dir / f"{prefix}{stamp}.md"
