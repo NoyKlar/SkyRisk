@@ -26,6 +26,12 @@ Roadmap Phase 1, items 10 and 12, in the user's words:
   - `denver-snow-out-of-window` now accepts `answered` or `needs_clarification`. The agent correctly explains the 2016–2025 window and offers an in-window year, which it labels a clarification.
   - The "2016" mention check stays.
   - The change is documented in DESIGN.md §7.
+- **Eval-driven prompt fix:**
+  - The first `--repeat 3` run found `fp-system-word` flaky (2/3). The primary model asked for clarification on a methodology question.
+  - One sentence was added to the system prompt's Scope section, saying questions about how scores are computed are in scope.
+  - A full `--repeat 3` re-run passed 33/33 (99/99 runs) with no regressions.
+  - The case stayed strict.
+  - DESIGN.md §7 has the before/after results.
 - **Cost checkpoint:** before the full `--repeat 3` run, the estimated number of API calls is given to the user, and the run waits for their go-ahead.
 
 ## Context

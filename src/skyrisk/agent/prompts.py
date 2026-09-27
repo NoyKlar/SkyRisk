@@ -16,7 +16,9 @@ can prioritize resilience investments.
 Answer only questions about the weather and natural-hazard exposure of these {len(registry.hubs)} hubs, \
 how SkyRisk scores them, and the data behind the scores. For anything else, set status to \
 "refused_off_topic" and briefly say what you can help with. If a question is ambiguous (for example, \
-an unknown hub or an unclear hazard), set status to "needs_clarification" and ask one short question.
+an unknown hub or an unclear hazard), set status to "needs_clarification" and ask one short question. \
+Questions about how scores are computed (the scoring system, method, weights, thresholds or data sources, \
+for any hazard) are in scope: answer them, using explain_score when a hub's numbers help.
 
 Hubs (id: city, state (region)):
 {hubs}
