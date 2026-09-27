@@ -63,6 +63,8 @@ def _parser() -> argparse.ArgumentParser:
     ev.add_argument("--case", action="append", dest="case_globs", metavar="GLOB", help="only case ids matching (repeatable)")
     ev.add_argument("--category", action="append", dest="categories", metavar="NAME", help="only this category (repeatable)")
     ev.add_argument("--out", type=Path, default=Path("evals/results"), help="report directory")
+    ev.add_argument("--report-name", metavar="NAME",
+                    help="write <NAME>-<stamp>.* and <NAME>-latest.* instead of latest.* (e.g. for a subset run)")
     ev.add_argument("--simulate-outage", choices=OUTAGE_VENDORS, metavar="VENDOR",
                     help="make every model from VENDOR (anthropic|openai) fail, e.g. anthropic: OpenAI answers and "
                          "the classifier is skipped; reports go to <VENDOR>-outage-*")
@@ -236,7 +238,8 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
               if args.simulate_outage else meta.primary_model)
     print(f"Running {len(cases)} case(s) x {args.repeat} against {target}...")
     report = run_evals(agent, cases, ctx, meta, repeat=args.repeat)
-    prefix = f"{args.simulate_outage}-outage-" if args.simulate_outage else ""
+    prefix = (f"{args.report_name}-" if args.report_name
+              else f"{args.simulate_outage}-outage-" if args.simulate_outage else "")
     path = write_reports(report, args.out, started.strftime("%Y%m%d-%H%M%S"), prefix)
     g = report.guardrails
     print(f"\n{report.cases_passed}/{len(report.cases)} cases passed | "

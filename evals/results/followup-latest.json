@@ -1,0 +1,746 @@
+{
+  "meta": {
+    "started_at": "2026-09-28T00:59:37+03:00",
+    "primary_model": "anthropic:claude-sonnet-5",
+    "fallback_model": "openai:gpt-6-luna",
+    "classifier_model": "anthropic:claude-haiku-4-5",
+    "score_run_id": 7,
+    "scoring_config_version": "1.2",
+    "simulated_outage": null
+  },
+  "repeat": 3,
+  "cases": [
+    {
+      "id": "followup-dallas-heat",
+      "category": "follow_up",
+      "question": "And for heat?",
+      "prior_turns": [
+        "Why is Dallas's risk high?"
+      ],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 13.8583520000102,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score",
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 432,
+              "output_tokens": 50,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 85,
+              "output_tokens": 106,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 3334
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1528,
+              "output_tokens": 165,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 2342,
+              "output_tokens": 111,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 3282,
+              "output_tokens": 902,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 429,
+              "output_tokens": 69,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 695,
+              "output_tokens": 110,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1486,
+              "output_tokens": 189,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1892,
+              "output_tokens": 554,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "Dallas's heat sub-score is 59.86/100 (relative to the other 12 hubs), driven by two inputs. First, an average of 44.59 days per year with max temperature ≥35°C (2016-2025 Open-Meteo data), which normalizes to a moderate 32.41 on the 0-100 scale. Second, and more impactful, is FEMA NRI's heat-wave frequency metric for Dallas County (about 19.1 events/year historically), which normalizes to 87.31 - much higher than the raw day-count alone would suggest, so it carries more weight in the sub-score. Heat itself is weighted 15% of Dallas's overall risk score, alongside tornado, flood, winter and hurricane."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 13.168200667016208,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score",
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 432,
+              "output_tokens": 54,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 85,
+              "output_tokens": 105,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1527,
+              "output_tokens": 780,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 429,
+              "output_tokens": 63,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 615,
+              "output_tokens": 120,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1417,
+              "output_tokens": 165,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1799,
+              "output_tokens": 532,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "Dallas's heat sub-score is 59.86 (relative, weight 15% of overall). Two things push it up: (1) historically Dallas averages about 44.6 days per year with a daily max ≥35°C (95°F) over 2016-2025 — a real, frequent hazard, though it only lands at the 32nd percentile among the 13 hubs, so several other hubs (e.g., Phoenix) see even more extreme-heat days; (2) FEMA NRI's heat-wave frequency measure is much more extreme for Dallas County — about 19.1 heat-wave events/year, which sits at the 87th percentile across hubs and contributes more points to the score. So Dallas's heat exposure is driven more by NRI's county-level heat-wave frequency metric than by raw extreme-heat day counts, though both matter."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 13.842776332981884,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score",
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 432,
+              "output_tokens": 47,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 85,
+              "output_tokens": 101,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1523,
+              "output_tokens": 160,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 2105,
+              "output_tokens": 939,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 429,
+              "output_tokens": 63,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 763,
+              "output_tokens": 145,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1590,
+              "output_tokens": 161,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1968,
+              "output_tokens": 539,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "Dallas's heat sub-score is 59.86/100 (relative, 15% weight in the overall score). Two things drive it: (1) FEMA NRI's heat-wave frequency for Dallas County is 19.11 events/year, which normalizes to 87.31 out of 100 across the 13 hubs — a strong contributor; (2) historically, Dallas averages 44.59 days per year with a max temperature ≥35°C (95°F) over 2016-2025, which normalizes to 32.41. Combined, these give the 59.86 heat sub-score, making heat the second-largest driver of Dallas's overall risk after tornado exposure (which is maxed at 100)."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "followup-midwest-snow-last-year",
+      "category": "follow_up",
+      "question": "How many snow days did it have last year?",
+      "prior_turns": [
+        "Which Midwest hub is most exposed to winter disruption?"
+      ],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 8.498090625042096,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 437,
+              "output_tokens": 58,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 93,
+              "output_tokens": 100,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 622,
+              "output_tokens": 493,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 435,
+              "output_tokens": 44,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 426,
+              "output_tokens": 188,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 854,
+              "output_tokens": 295,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "Minneapolis had about 21 snow days in 2025 (days with snowfall ≥ 1 cm), based on gridded weather reanalysis data for the year. That's roughly 1 in 17 days with measurable snow, consistent with it being the most winter-exposed Midwest hub."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 17.20295658404939,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat",
+            "list_hubs"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 437,
+              "output_tokens": 57,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 93,
+              "output_tokens": 100,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 622,
+              "output_tokens": 500,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 435,
+              "output_tokens": 70,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 429,
+              "output_tokens": 188,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 857,
+              "output_tokens": 47,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1511,
+              "output_tokens": 176,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1928,
+              "output_tokens": 30,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 2563,
+              "output_tokens": 260,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "Minneapolis had 21 snow days in 2025 (days with snowfall ≥1 cm), based on Open-Meteo gridded daily data at the hub's coordinates."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 9.006891916040331,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 437,
+              "output_tokens": 52,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 93,
+              "output_tokens": 100,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 622,
+              "output_tokens": 483,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 435,
+              "output_tokens": 68,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 414,
+              "output_tokens": 188,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 842,
+              "output_tokens": 281,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "In 2025 (the latest full year in the data), Minneapolis had 21 days with meaningful snowfall (snowfall ≥ 1 cm). This aligns with its top winter risk score among Midwest hubs."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "he-followup-dallas-heat",
+      "category": "follow_up",
+      "question": "ומה לגבי חום?",
+      "prior_turns": [
+        "למה הסיכון של דאלאס גבוה?"
+      ],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 24.26884783396963,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score",
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 443,
+              "output_tokens": 68,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 91,
+              "output_tokens": 120,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1548,
+              "output_tokens": 170,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 2547,
+              "output_tokens": 999,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 435,
+              "output_tokens": 60,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 734,
+              "output_tokens": 113,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1528,
+              "output_tokens": 183,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1927,
+              "output_tokens": 710,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "החום בדאלאס תורם באופן משמעותי לסיכון הכולל שלה: תת-הציון היחסי לחום הוא 59.86 מתוך 100 (משקל של 15% בציון הכולל). זה מורכב משני מדדים: (1) בפועל, דאלאס חווה בממוצע כ-44.6 ימי חום קיצוני בשנה (טמפ' מקסימום יומית ≥35°C), על סמך נתוני 2016-2025 - זה נותן ציון מנורמל של כ-32.4 מתוך 100 בהשוואה לשאר המרכזים. (2) מדד ה-FEMA NRI לתדירות גלי חום במחוז דאלאס (Dallas County) גבוה מאוד - נורמליזציה של 87.31 מתוך 100, שזה המרכיב הדומיננטי בציון החום. שילוב שני המדדים האלה נותן את הציון הכולל של 59.86 לחום."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 18.426443792064674,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 443,
+              "output_tokens": 54,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 91,
+              "output_tokens": 137,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1564,
+              "output_tokens": 117,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 2288,
+              "output_tokens": 127,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 3244,
+              "output_tokens": 1049,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 435,
+              "output_tokens": 62,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 833,
+              "output_tokens": 126,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1640,
+              "output_tokens": 668,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "בדאלאס תת-הניקוד לחום קיצוני הוא 59.86 מתוך 100 (יחסי לשאר 13 הרכזות), שהוא הגורם השני בחשיבותו לאחר טורנדו. הוא מורכב משני מדדים: (1) ממוצע של כ-44.6 ימי חום קיצוני בשנה בפועל (2016-2025), שמנורמל לציון של 32.41 מתוך 100 בין הרכזות; (2) מדד תדירות גלי-חום של FEMA NRI לפי מחוז דאלאס (כ-19.1 מקרים), שמנורמל לציון גבוה של 87.31 - כלומר מחוז דאלאס נחשב חשוף מאוד לגלי חום ביחס לשאר המחוזות. שקלול שני המדדים (עם משקל של 15% מהניקוד הכולל) נותן את הציון 59.86. חשוב לזכור שמדדי ה-FEMA מתארים את כל מחוז דאלאס ולא רק את אתר הרכזת עצמו."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 20.11863929196261,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 443,
+              "output_tokens": 57,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 91,
+              "output_tokens": 120,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1548,
+              "output_tokens": 169,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 2546,
+              "output_tokens": 974,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 435,
+              "output_tokens": 72,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 728,
+              "output_tokens": 95,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1504,
+              "output_tokens": 750,
+              "cache_read_tokens": 3334,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [
+            "answered"
+          ],
+          "answer": "החום בדאלאס הוא הגורם השני-בחשיבותו לציון הכולל שלה, עם תת-ציון של 59.86 מתוך 100 (משקל 15% מהציון הכולל). הוא נבנה משני מדדים: (1) ממוצע ימי חום קיצוני בשנה - כ-44.6 ימים, שמנורמל לציון 32.41 מתוך 100 יחסית לשאר המוקדים; (2) תדירות גלי חום לפי FEMA NRI (nri_hwav_afreq) - 19.1, שמנורמל לציון גבוה מאוד של 87.31, כלומר דאלאס נמצאת קרוב לראש הרשימה מבחינת שכיחות גלי חום ברמת המחוז. השילוב של תדירות גבוהה של אירועי גל-חום (לפי הנתון של NRI) עם מספר משמעותי של ימי חום קיצוני בפועל מעלה את תת-הציון הכולל של החום לרמה בינונית-גבוהה, שהיא השנייה בחשיבותה (אחרי טורנדו) בהרכב הציון הכולל של דאלאס."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    }
+  ],
+  "categories": [
+    {
+      "category": "follow_up",
+      "cases": 3,
+      "passed": 3,
+      "runs": 9,
+      "runs_passed": 9
+    }
+  ],
+  "guardrails": {
+    "in_scope_runs": 9,
+    "in_scope_refused": 0,
+    "false_positives_by_layer": {},
+    "must_refuse_runs": 0,
+    "must_refuse_answered": 0,
+    "false_positive_rate": 0.0,
+    "miss_rate": 0.0
+  },
+  "latency": {
+    "p50_s": 13.8583520000102,
+    "p95_s": 24.26884783396963,
+    "max_s": 24.26884783396963
+  },
+  "served_by": {
+    "anthropic:claude-sonnet-5": 9
+  },
+  "reliability": {
+    "error_runs": 0,
+    "grounding_failures": 0
+  },
+  "cost": {
+    "total_usd": 0.33599719999999994,
+    "per_run_usd": 0.03733302222222221,
+    "calls_by_model": {
+      "claude-haiku-4-5": 18,
+      "claude-sonnet-5": 50
+    },
+    "unpriced_models": []
+  },
+  "passed": true,
+  "cases_passed": 3
+}

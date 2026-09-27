@@ -297,12 +297,13 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 
 ## 7. Evaluation set and results
 
-**The set:** [`evals/cases.yaml`](../evals/cases.yaml), with 33 cases in six categories:
+**The set:** [`evals/cases.yaml`](../evals/cases.yaml), with 36 cases in seven categories. The full-set runs reported below used the first 33; the 3 `follow_up` cases were added later and run on their own ("Multi-turn follow-ups" below).
 
 | Category | What it tests |
 |---|---|
 | `core_examples` | The headline questions ("Midwest winter", "Denver last-year snow %"), with exact expected tools, arguments, numbers and hub order, plus an out-of-window year |
 | `normal` | Ranking, comparison, explanation, weather stats, methodology, and an unknown hub (must ask for clarification) |
+| `follow_up` | Two-turn conversations: a follow-up that names no hub ("And for heat?", "How many snow days did it have last year?"), including one in Hebrew |
 | `injection` | Instruction override, score dictation, role-play, fake `</system>` tags, prompt extraction, and a subtle "double Newark's numbers" |
 | `off_topic` | Poems, stock prices, coding, and **agricultural weather questions** (bananas, corn frost), which share vocabulary with the product |
 | `false_positive` | In-scope questions that *look* suspicious ("What's the **system** for scoring…", "**Ignore** Phoenix — …", "**override** last year's plan"). They must pass every guardrail. |
@@ -489,6 +490,40 @@ Costs are estimates from recorded token usage × `src/skyrisk/evals/pricing.py`.
 - **Only one outage shape was tested:** everything Anthropic fails at once. A Haiku-only outage (classifier skipped, Sonnet answering) was not run separately.
   - It combines two measured behaviours: Sonnet answering on the normal path, and the model refusing on its own on the outage path.
 - 33 cases × 3 runs is a small sample, and the look-alikes are adversarial by design.
+
+### Multi-turn follow-ups
+
+**Why.** Every case above starts in a fresh conversation, so conversation memory (the last 10 answered turns, §1 step 5) was untested. A follow-up like "And for heat?" names no hub. It can only be answered correctly by carrying the hub over from the earlier turn.
+
+**How.** A case can list `prior_turns`. The runner asks them in order in the same `Conversation`, then asks `question`, and checks only that last reply.
+- Every turn goes through the full agent, classifier included. The classifier sees only the current question, never the history.
+- A prior turn that is refused or errors fails the run with the reason "prior turn N: got …, so the follow-up has no context". Refused turns are not kept in history, so the follow-up would otherwise be tested without its context.
+- Latency is the follow-up turn only. Cost includes every turn.
+- `expect_tool` may be a list, which passes if any one listed call matches.
+
+**Cases** (category `follow_up`):
+
+| Case | Prior turn | Follow-up | Must |
+|---|---|---|---|
+| `followup-dallas-heat` | "Why is Dallas's risk high?" | "And for heat?" | call `explain_score` or `weather_stat` for Dallas; mention "heat" |
+| `followup-midwest-snow-last-year` | "Which Midwest hub is most exposed to winter disruption?" | "How many snow days did it have last year?" | resolve "it" to Minneapolis: `weather_stat(hub_ids=[minneapolis], stat=snow_day, year=2025)`; mention "2025" |
+| `he-followup-dallas-heat` | "למה הסיכון של דאלאס גבוה?" | "ומה לגבי חום?" (And what about heat?) | `explain_score(dallas, hazard=heat)` or `weather_stat(dallas, stat=extreme_heat)`. Heat is checked in the tool call, because the answer language is not fixed. |
+
+**Results** (`uv run skyrisk eval --category follow_up --repeat 3 --report-name followup`, 2026-09-28; report: [`evals/results/followup-latest.md`](../evals/results/followup-latest.md)):
+- **3/3 cases and 9/9 runs passed.**
+  - Every prior turn was answered, and every follow-up called the expected tool for the right hub.
+  - All answers were served by Sonnet, with no error replies and no grounding failures.
+  - Cost: $0.34 for the 9 two-turn runs (18 Haiku and 50 Sonnet calls).
+- **Memory held in both languages.**
+  - "It" resolved to Minneapolis in 3/3 runs: 21 snow days in 2025, taken from `weather_stat`.
+  - "And for heat?" resolved to Dallas in all 6 English and Hebrew runs, each citing Dallas's heat sub-score of 59.86.
+  - The Hebrew follow-ups were answered in Hebrew.
+- **Follow-up turns are slower:** 13.9 s p50, 24.3 s max. The model often called both `explain_score` and `weather_stat`, and one run also called `list_hubs`. The Hebrew turns were the slowest, at 18–24 s.
+  - These are answered turns only, so they are not directly comparable with the full-set p50 of 6.8 s, which includes fast refusals.
+- **One text slip, which no check caught:** a Hebrew answer said the heat score is relative to "the other 13 hubs"; it is 13 hubs in total, so 12 others.
+  - Grounding checks numbers against tool results, not wording, so it passed.
+  - It is recorded here rather than hidden. A `must_mention`-style check cannot catch it reliably.
+- **Limits:** 3 cases, 2 turns each. Longer conversations and follow-ups that switch hubs are not covered.
 
 ## 8. Key tradeoffs
 

@@ -93,6 +93,7 @@ uv run pytest -m live        # live smoke tests against Open-Meteo, FEMA, Claude
 uv run skyrisk eval                        # every case once
 uv run skyrisk eval --repeat 3             # 3 runs per case; a case passes only if all 3 pass (flaky cases are flagged)
 uv run skyrisk eval --category hebrew      # filter by category (repeatable)
+uv run skyrisk eval --category follow_up --report-name followup   # a subset, reported to followup-latest.* instead of latest.*
 uv run skyrisk eval --case 'offtopic-*'    # filter by case id glob (repeatable)
 ```
 
@@ -115,6 +116,8 @@ uv run skyrisk eval --case 'offtopic-*'    # filter by case id glob (repeatable)
 Run `uv run skyrisk eval --repeat 3` before merging any change to the system prompt, tools, guardrails or model ids, and treat a non-zero exit as a blocker. The command can run unchanged as a CI step, given the API key as a secret and a scored database.
 
 **Classifier benchmark.** `skyrisk eval-classifier` calls the guardrail classifiers directly, with no agent model, on the `injection`, `off_topic`, `false_positive` and `hebrew` cases. It compares them side by side: false-positive and miss rates, per-category accuracy, escalations, latency, and cost per 1k questions. Measured result: Jev was much faster and cheaper, but it wrongly refused 43% of legitimate look-alike questions. So the default is Haiku alone, with no Jev fallback: if Haiku fails, the check is skipped, which never blocks a real user. Details are in `docs/DESIGN.md` §7.
+
+**Multi-turn cases.** A case may list `prior_turns`. They are asked first in the same conversation, and only the last reply is checked (see `evals/cases.yaml`). The `follow_up` category (3 cases, one in Hebrew) tests conversation memory. The latest run passed 9/9 for $0.34 (`docs/DESIGN.md` §7).
 
 **Outage path.** `uv run skyrisk eval --simulate-outage anthropic --repeat 3` makes every Anthropic model fail on every call. The agent then runs exactly as it would during an Anthropic outage: the classifier is skipped and OpenAI answers. It needs only `OPENAI_API_KEY`. Reports go to `evals/results/anthropic-outage-*` (`anthropic-outage-latest.*` is committed). The full set costs about $0.02 with `gpt-6-luna`. The latest result is 33/33 cases on both the normal and the outage path (before/after in `docs/DESIGN.md` §7). `skyrisk chat --simulate-outage anthropic` does the same for manual testing.
 
