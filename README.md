@@ -37,6 +37,7 @@ The page at `/` is plain HTML/CSS/JS served by the same process. It talks only t
 |---|---|---|
 | `POST` | `/api/chat` | `{"message", "session_id"?}` → answer, limitations, scores cited, model and tools used, `session_id` |
 | `DELETE` | `/api/sessions/{id}` | clear a conversation's memory |
+| `GET` | `/api/hubs` | the hubs you can ask about (id, name, city, state, region) |
 | `GET` | `/api/health` | liveness check |
 | `GET` | `/api/docs` | OpenAPI docs |
 
