@@ -1,4 +1,8 @@
 import json
+import socket
+import threading
+import time
+from contextlib import contextmanager
 from types import SimpleNamespace
 
 import anthropic
@@ -93,6 +97,7 @@ def _status(sdk, code, body=None, message="err"):
 
 @pytest.mark.parametrize("module,sdk", [(ap, anthropic), (op, openai)])
 def test_error_classification(module, sdk):
+    assert module.classify_error(sdk.APITimeoutError(request=REQUEST)) == "timeout"
     assert module.classify_error(sdk.APIConnectionError(request=REQUEST)) == "transient"
     assert module.classify_error(_status(sdk, 429)) == "transient"
     assert module.classify_error(_status(sdk, 500)) == "transient"
@@ -171,3 +176,65 @@ def test_usage_is_recorded_per_call_without_double_counting_cache():
                                               input_tokens_details=SimpleNamespace(cached_tokens=3000)))
     u = op.usage_of(o, "gpt-6-luna")
     assert (u.input_tokens, u.cache_read_tokens, u.output_tokens) == (2000, 3000, 700)
+
+
+
+def test_retry_helper_fails_over_on_timeout_without_retrying():
+    fn, waits = _Flaky(anthropic.APITimeoutError(request=REQUEST)), []
+    with pytest.raises(ProviderUnavailable, match="timed out"):
+        call_with_retries(fn, ap.classify_error, name="p", sleep=waits.append)
+    assert fn.calls == 1 and waits == []
+
+
+@contextmanager
+def hanging_server():
+    """A local HTTP endpoint that accepts connections and never answers, like a provider that hangs."""
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+    server.settimeout(0.05)
+    accepted, stop = [], threading.Event()
+
+    def accept_forever():
+        while not stop.is_set():
+            try:
+                accepted.append(server.accept()[0])
+            except TimeoutError:
+                pass
+
+    thread = threading.Thread(target=accept_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.getsockname()[1]}", accepted
+    finally:
+        stop.set()
+        thread.join()
+        for conn in accepted:
+            conn.close()
+        server.close()
+
+
+def hanging_provider(kind, url, timeout_s, waits):
+    if kind == "anthropic":
+        return ap.AnthropicProvider(anthropic.Anthropic(api_key="x", base_url=url), "claude-sonnet-5",
+                                    timeout_s=timeout_s, sleep=waits.append)
+    return op.OpenAIProvider(openai.OpenAI(api_key="x", base_url=url), "gpt-6-luna",
+                             timeout_s=timeout_s, sleep=waits.append)
+
+
+@pytest.mark.parametrize("kind", ["anthropic", "openai"])
+def test_hanging_provider_times_out_once_and_is_unavailable(kind):
+    waits = []
+    with hanging_server() as (url, accepted):
+        provider = hanging_provider(kind, url, 0.3, waits)
+        start = time.monotonic()
+        with pytest.raises(ProviderUnavailable, match="timed out"):
+            provider.start_turn("system", [], "q", [], {"type": "object"}).step(None)
+        elapsed = time.monotonic() - start
+    assert 0.3 <= elapsed < 2.0
+    assert len(accepted) == 1 and waits == []  # one attempt, no retry backoff
+
+
+def test_configured_timeout_reaches_the_sdk_clients():
+    assert ap.AnthropicProvider(anthropic.Anthropic(api_key="x"), "m", timeout_s=12.5).client.timeout == 12.5
+    assert op.OpenAIProvider(openai.OpenAI(api_key="x"), "m").client.timeout == 30.0

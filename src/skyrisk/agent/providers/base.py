@@ -10,10 +10,11 @@ from typing import Any, Literal, Protocol, TypeVar
 from pydantic import BaseModel
 
 T = TypeVar("T")
-ErrorKind = Literal["transient", "misconfigured", "fatal"]
+ErrorKind = Literal["transient", "timeout", "misconfigured", "fatal"]
 
 DEFAULT_RETRIES = 2
 DEFAULT_BACKOFF_S = 1.0
+DEFAULT_TIMEOUT_S = 30.0  # per model call; a hanging provider fails over after this, without retries
 
 
 class CallUsage(BaseModel):
@@ -47,7 +48,10 @@ def call_with_retries(
     backoff_s: float = DEFAULT_BACKOFF_S,
     sleep: Callable[[float], None] = time.sleep,
 ) -> T:
-    """Call a provider, retrying only transient errors (SDK retries are disabled on our clients)."""
+    """Call a provider, retrying only transient errors (SDK retries are disabled on our clients).
+
+    A timeout is not retried: the provider may be hanging, so the turn moves to the fallback at once.
+    """
     for attempt in range(retries + 1):
         try:
             return fn()
@@ -55,6 +59,8 @@ def call_with_retries(
             kind = classify(e)
             if kind == "misconfigured":
                 raise ProviderMisconfigured(f"{name}: {e}") from e
+            if kind == "timeout":
+                raise ProviderUnavailable(f"{name}: timed out ({e})") from e
             if kind == "fatal":
                 raise
             if attempt == retries:

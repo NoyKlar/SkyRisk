@@ -11,6 +11,7 @@ import anthropic
 from skyrisk.agent.providers.base import (
     CallUsage,
     DEFAULT_RETRIES,
+    DEFAULT_TIMEOUT_S,
     ErrorKind,
     HistoryTurn,
     ProviderResponseError,
@@ -93,6 +94,8 @@ def _error_type(error: anthropic.APIStatusError) -> str | None:
 
 
 def classify_error(error: Exception) -> ErrorKind:
+    if isinstance(error, anthropic.APITimeoutError):
+        return "timeout"
     if isinstance(error, anthropic.APIStatusError):
         message = str(error).lower()
         if _error_type(error) == "billing_error" or any(p in message for p in _QUOTA_PHRASES):
@@ -152,10 +155,11 @@ class _Session:
 
 class AnthropicProvider:
     def __init__(self, client: anthropic.Anthropic, model: str, effort: str = "medium",
-                 max_tokens: int = 16000, *, retries: int = DEFAULT_RETRIES,
+                 max_tokens: int = 16000, *, retries: int = DEFAULT_RETRIES, timeout_s: float = DEFAULT_TIMEOUT_S,
                  sleep: Callable[[float], None] = time.sleep) -> None:
-        # Retries are ours (they skip quota errors), so the SDK's own retries are off.
-        self.client = client.with_options(max_retries=0)
+        # Retries are ours (they skip quota errors), so the SDK's own retries are off. The short
+        # per-call timeout replaces the SDK's 10-minute default, so a hanging provider fails over fast.
+        self.client = client.with_options(max_retries=0, timeout=timeout_s)
         self.retries = retries
         self.sleep = sleep
         self.model = model

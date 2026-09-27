@@ -209,3 +209,19 @@ def test_reply_carries_classifier_and_model_usage(tool_ctx):
     classifier = _Classifier(Verdict(label="in_scope", reason="ok", usage=[usage]))
     agent, _ = _agent(tool_ctx, FakeProvider(script=[answer("fine")]), classifier=classifier)
     assert agent.ask(Conversation(), "Which hub is riskiest?").usage == [usage]
+
+
+
+def test_hanging_primary_falls_back_within_its_timeout(tool_ctx):
+    import time
+
+    from test_providers import hanging_provider, hanging_server
+
+    fallback = FakeProvider(script=[answer("answered by the fallback")], name="fake:openai")
+    with hanging_server() as (url, _):
+        agent, logs = _agent(tool_ctx, hanging_provider("anthropic", url, 0.3, []), fallback)
+        start = time.monotonic()
+        reply = agent.ask(Conversation(), "Which hub is riskiest?")
+        elapsed = time.monotonic() - start
+    assert (reply.status, reply.served_by) == ("answered", "fake:openai")
+    assert reply.warnings == ["anthropic:claude-sonnet-5 unavailable"] and elapsed < 2.0

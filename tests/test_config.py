@@ -126,3 +126,10 @@ def test_skyrisk_classifier_env_swaps_primary_and_fallback(config_dir):
     assert base.with_env_overrides(env).classifier.haiku.model == "claude-haiku-9"
     with pytest.raises(ValueError, match="SKYRISK_CLASSIFIER"):
         base.with_env_overrides({"SKYRISK_CLASSIFIER": "gpt"})
+
+
+def test_answering_providers_have_a_short_timeout(config_dir):
+    config = load_agent_config(config_dir / "agent.yaml")
+    assert config.primary.timeout_s == config.fallback.timeout_s == 30.0
+    with pytest.raises(ValidationError):
+        AgentConfig.model_validate({**config.model_dump(), "primary": {**config.primary.model_dump(), "timeout_s": 0}})

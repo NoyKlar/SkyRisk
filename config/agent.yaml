@@ -4,10 +4,12 @@ primary:
   provider: anthropic
   model: claude-sonnet-5
   effort: medium
+  timeout_s: 30.0        # per model call; a timeout is not retried, the turn moves to the fallback
 fallback:
   provider: openai
   model: gpt-6-luna      # cost-efficient tier; function calling + structured outputs via Responses API
   effort: medium
+  timeout_s: 30.0
 classifier:
   # Haiku only, with no fallback: if it fails, the check is skipped rather than risking a wrong refusal
   # (see docs/DESIGN.md §7). Jev is opt-in for re-testing: SKYRISK_CLASSIFIER=jev makes it the primary,

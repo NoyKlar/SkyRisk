@@ -115,6 +115,7 @@ class ModelConfig(BaseModel):
     provider: Literal["anthropic", "openai"]
     model: str
     effort: Literal["low", "medium", "high"] = "medium"
+    timeout_s: float = Field(default=30.0, gt=0)  # per model call; on timeout the turn moves to the fallback
 
 
 ClassifierName = Literal["haiku", "jev"]

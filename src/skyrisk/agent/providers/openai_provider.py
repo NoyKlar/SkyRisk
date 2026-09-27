@@ -12,6 +12,7 @@ import openai
 from skyrisk.agent.providers.base import (
     CallUsage,
     DEFAULT_RETRIES,
+    DEFAULT_TIMEOUT_S,
     ErrorKind,
     HistoryTurn,
     ProviderResponseError,
@@ -100,6 +101,8 @@ def _codes(error: openai.APIStatusError) -> set[str]:
 
 
 def classify_error(error: Exception) -> ErrorKind:
+    if isinstance(error, openai.APITimeoutError):
+        return "timeout"
     if isinstance(error, openai.APIStatusError):
         if _codes(error) & QUOTA_CODES:
             return "misconfigured"
@@ -152,10 +155,11 @@ class _Session:
 
 class OpenAIProvider:
     def __init__(self, client: openai.OpenAI, model: str, effort: str = "medium",
-                 max_tokens: int = 16000, *, retries: int = DEFAULT_RETRIES,
+                 max_tokens: int = 16000, *, retries: int = DEFAULT_RETRIES, timeout_s: float = DEFAULT_TIMEOUT_S,
                  sleep: Callable[[float], None] = time.sleep) -> None:
-        # Retries are ours (they skip quota errors), so the SDK's own retries are off.
-        self.client = client.with_options(max_retries=0)
+        # Retries are ours (they skip quota errors), so the SDK's own retries are off. The short
+        # per-call timeout replaces the SDK's 10-minute default, so a hanging provider fails over fast.
+        self.client = client.with_options(max_retries=0, timeout=timeout_s)
         self.retries = retries
         self.sleep = sleep
         self.model = model

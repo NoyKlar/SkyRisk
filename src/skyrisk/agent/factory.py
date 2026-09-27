@@ -59,8 +59,9 @@ class _DownClassifier:
 
 def _provider(cfg: ModelConfig, env: Mapping[str, str], max_tokens: int) -> LLMProvider:
     if cfg.provider == "anthropic":
-        return AnthropicProvider(anthropic.Anthropic(), cfg.model, cfg.effort, max_tokens)
-    return OpenAIProvider(openai.OpenAI(api_key=env["OPENAI_API_KEY"]), cfg.model, cfg.effort, max_tokens)
+        return AnthropicProvider(anthropic.Anthropic(), cfg.model, cfg.effort, max_tokens, timeout_s=cfg.timeout_s)
+    return OpenAIProvider(openai.OpenAI(api_key=env["OPENAI_API_KEY"]), cfg.model, cfg.effort, max_tokens,
+                          timeout_s=cfg.timeout_s)
 
 
 def _has_key(cfg: ModelConfig, env: Mapping[str, str]) -> bool:
