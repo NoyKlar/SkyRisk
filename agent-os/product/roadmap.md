@@ -21,7 +21,7 @@
 
 1. **Scheduled risk alerts** *(stretch goal — may be pulled into MVP if time allows; APScheduler + score-history groundwork is already in the stack)* — daily job recomputes hub scores and sends a webhook/email alert when a hub's risk score changes beyond a threshold
 2. **Voice input/output** in the chat UI
-3. **Jev classifier** (TypeSafe AI, released Sept 2026) for fast intent routing and guardrail checks (optional, if it fits)
+3. **Jev classifier** (TypeSafe AI, released Sept 2026) for fast intent routing and guardrail checks *(deferred: spec shaped but not implemented, because official API access requires a credit card. See `docs/DESIGN.md` §10, Future work: alternative classifier)*
 4. **Live forecast layer** — short-term risk (next 7 days) on top of historical exposure
 5. **Cost/impact weighting** — factor hub revenue and shipment volume into prioritization
 6. **Deployment** *(stretch goal — may be pulled into MVP if time allows; the assignment prefers deployment)* — to a public URL
