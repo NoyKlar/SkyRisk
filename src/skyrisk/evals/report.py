@@ -71,6 +71,8 @@ def render_markdown(report: EvalReport) -> str:
                 lines.append(f"- run {i}: passed")
             else:
                 lines.append(f"- run {i}: {'; '.join(r.reasons)}")
+                if r.answer:
+                    lines.append(f"  > {_cell(r.answer)[:400]}")
         lines.append("")
 
     flaky = [c.id for c in report.cases if c.flaky]

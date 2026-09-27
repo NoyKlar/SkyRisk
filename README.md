@@ -116,7 +116,7 @@ Run `uv run skyrisk eval --repeat 3` before merging any change to the system pro
 
 **Classifier benchmark.** `skyrisk eval-classifier` calls the guardrail classifiers directly, with no agent model, on the `injection`, `off_topic`, `false_positive` and `hebrew` cases. It compares them side by side: false-positive and miss rates, per-category accuracy, escalations, latency, and cost per 1k questions. Measured result: Jev was much faster and cheaper, but it wrongly refused 43% of legitimate look-alike questions. So the default is Haiku alone, with no Jev fallback: if Haiku fails, the check is skipped, which never blocks a real user. Details are in `docs/DESIGN.md` §7.
 
-**Not yet measured:** every eval so far used Sonnet as the answering model. Guardrail behaviour when the OpenAI fallback answers (a full Anthropic outage) is the next eval step.
+**Outage path.** `uv run skyrisk eval --simulate-outage anthropic --repeat 3` makes every Anthropic model fail on every call. The agent then runs exactly as it would during an Anthropic outage: the classifier is skipped and OpenAI answers. It needs only `OPENAI_API_KEY`. Reports go to `evals/results/anthropic-outage-*` (`anthropic-outage-latest.*` is committed). The full set costs about $0.02 with `gpt-6-luna`. The latest result is 32/33 cases: the one miss is `inject-subtle`, which the Haiku classifier normally catches (`docs/DESIGN.md` §7). `skyrisk chat --simulate-outage anthropic` does the same for manual testing.
 
 ```bash
 uv run skyrisk eval-classifier --repeat 3 --dry-run   # print the call and cost estimate, make no calls

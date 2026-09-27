@@ -39,6 +39,7 @@ class RunResult(BaseModel):
     tools: list[str]
     warnings: list[str] = []
     usage: list[CallUsage] = []
+    answer: str = ""  # the reply text, so failures can be read after the run
 
 
 class CaseResult(BaseModel):
@@ -141,7 +142,8 @@ def _run_once(agent: Agent, case: EvalCase, ctx: ToolContext, now: Callable[[], 
     reasons = check_run(case, reply, ctx)
     return RunResult(status=reply.status, passed=not reasons, reasons=reasons, latency_s=latency,
                      served_by=reply.served_by, refused_by=refusing_layer(reply),
-                     tools=list(dict.fromkeys(reply.tools_used)), warnings=reply.warnings, usage=reply.usage)
+                     tools=list(dict.fromkeys(reply.tools_used)), warnings=reply.warnings, usage=reply.usage,
+                     answer=reply.text)
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:
