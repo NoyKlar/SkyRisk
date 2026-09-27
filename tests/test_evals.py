@@ -271,3 +271,50 @@ def test_outage_report_uses_its_own_prefix_and_shows_cost(tool_ctx, tmp_path):
     text = (tmp_path / "anthropic-outage-latest.md").read_text()
     assert "Simulated outage: `anthropic`" in text and "## Cost" in text
     assert "| Error replies" in text and not (tmp_path / "latest.md").exists()
+
+
+# --- multi-turn follow-ups ----------------------------------------------------------------
+
+FOLLOW_UP = dict(id="fu", category="follow_up", prior_turns=["Why is Dallas's risk high?"], question="And for heat?",
+                 expect_tool=[{"name": "explain_score", "arguments": {"hub_id": "dallas"}},
+                              {"name": "weather_stat", "arguments": {"hub_ids": ["dallas"]}}],
+                 must_mention=["heat"])
+
+
+def test_prior_turns_run_in_the_same_conversation_and_only_the_follow_up_is_timed(tool_ctx):
+    provider = FakeProvider(script=[
+        call("explain_score", hub_id="dallas"), answer("Dallas is exposed to heat and tornadoes."),  # prior turn
+        call("explain_score", hub_id="dallas", hazard="heat"), answer("Dallas's heat exposure is high."),
+    ])
+    agent = Agent(tool_ctx, [provider], "system", log=lambda m: None)
+    ticks = iter([0.0, 5.0, 7.0])  # start, follow-up start (after the prior turn), end
+    report = run_evals(agent, [_case(**FOLLOW_UP)], tool_ctx, META, now=lambda: next(ticks), log=lambda m: None)
+
+    run = report.cases[0].runs[0]
+    assert run.passed, run.reasons
+    assert (run.prior_statuses, run.latency_s) == (["answered"], 2.0)
+    assert provider.histories[0] == []
+    assert [t.user for t in provider.histories[1]] == ["Why is Dallas's risk high?"]
+
+
+def test_a_refused_prior_turn_fails_the_run_with_a_clear_reason(tool_ctx):
+    class Refuse:
+        name = "fake:classifier"
+
+        def classify(self, text):
+            return Verdict(label="off_topic" if "Why" in text else "in_scope", reason="test")
+
+    provider = FakeProvider(script=[call("explain_score", hub_id="dallas", hazard="heat"), answer("Heat is high.")])
+    agent = Agent(tool_ctx, [provider], "system", classifier=Refuse(), log=lambda m: None)
+    run = run_evals(agent, [_case(**FOLLOW_UP)], tool_ctx, META, log=lambda m: None).cases[0].runs[0]
+    assert run.prior_statuses == ["refused_off_topic"]
+    assert run.reasons == ["prior turn 1: got refused_off_topic, so the follow-up has no context"]
+
+
+def test_expect_tool_list_passes_on_any_match_and_reports_all_options(tool_ctx):
+    case = _case(**FOLLOW_UP)
+    ok = _reply(text="heat", tool_calls=[{"name": "weather_stat", "arguments": {"hub_ids": ["dallas"], "stat": "extreme_heat"}}])
+    assert check_run(case, ok, tool_ctx) == []
+    wrong = _reply(text="heat", tool_calls=[{"name": "explain_score", "arguments": {"hub_id": "houston"}}])
+    [reason] = check_run(case, wrong, tool_ctx)
+    assert reason.startswith("expect_tool: none of the accepted calls was made") and "weather_stat" in reason

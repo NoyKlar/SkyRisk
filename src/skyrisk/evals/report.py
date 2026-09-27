@@ -65,7 +65,9 @@ def render_markdown(report: EvalReport) -> str:
     for c in failed:
         expected = " or ".join(f"`{e}`" for e in c.expect)
         lines += [f"### `{c.id}` ({c.category}), {c.passes}/{len(c.runs)} runs passed"
-                  + (" (flaky)" if c.flaky else ""), "", f"> {c.question}", "", f"Expected {expected}.", ""]
+                  + (" (flaky)" if c.flaky else ""), ""]
+        lines += [f"> (prior turn {i}) {q}" for i, q in enumerate(c.prior_turns, start=1)]
+        lines += [f"> {c.question}", "", f"Expected {expected}.", ""]
         for i, r in enumerate(c.runs, start=1):
             if r.passed:
                 lines.append(f"- run {i}: passed")

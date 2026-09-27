@@ -38,7 +38,8 @@ class RunResult(BaseModel):
     refused_by: str | None
     tools: list[str]
     warnings: list[str] = []
-    usage: list[CallUsage] = []
+    usage: list[CallUsage] = []  # includes the prior turns of a multi-turn case
+    prior_statuses: list[str] = []
     answer: str = ""  # the reply text, so failures can be read after the run
 
 
@@ -46,6 +47,7 @@ class CaseResult(BaseModel):
     id: str
     category: str
     question: str
+    prior_turns: list[str] = []
     expect: list[str]  # any of these statuses passes
     runs: list[RunResult]
 
@@ -131,19 +133,35 @@ class EvalReport(BaseModel):
         return sum(c.passed for c in self.cases)
 
 
+KEEPS_CONTEXT = ("answered", "needs_clarification")  # the statuses Conversation records in history
+
+
 def _run_once(agent: Agent, case: EvalCase, ctx: ToolContext, now: Callable[[], float]) -> RunResult:
+    """One run in a fresh conversation: the prior turns (if any), then the checked question.
+
+    Latency is the checked question's turn only.
+    """
+    conversation, prior_usage, prior_statuses, prior_reasons = Conversation(), [], [], []
     start = now()
     try:
-        reply = agent.ask(Conversation(), case.question)
+        for i, prior in enumerate(case.prior_turns, start=1):
+            r = agent.ask(conversation, prior)
+            prior_usage += r.usage
+            prior_statuses.append(r.status)
+            if r.status not in KEEPS_CONTEXT:
+                prior_reasons.append(f"prior turn {i}: got {r.status}, so the follow-up has no context")
+        start = now()
+        reply = agent.ask(conversation, case.question)
     except Exception as e:  # noqa: BLE001 - one broken run must not stop the eval
         return RunResult(status="exception", passed=False, reasons=[f"exception: {type(e).__name__}: {e}"],
-                         latency_s=now() - start, served_by=None, refused_by=None, tools=[])
+                         latency_s=now() - start, served_by=None, refused_by=None, tools=[],
+                         usage=prior_usage, prior_statuses=prior_statuses)
     latency = now() - start
-    reasons = check_run(case, reply, ctx)
+    reasons = prior_reasons + check_run(case, reply, ctx)
     return RunResult(status=reply.status, passed=not reasons, reasons=reasons, latency_s=latency,
                      served_by=reply.served_by, refused_by=refusing_layer(reply),
-                     tools=list(dict.fromkeys(reply.tools_used)), warnings=reply.warnings, usage=reply.usage,
-                     answer=reply.text)
+                     tools=list(dict.fromkeys(reply.tools_used)), warnings=reply.warnings,
+                     usage=prior_usage + reply.usage, answer=reply.text, prior_statuses=prior_statuses)
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:
@@ -158,7 +176,8 @@ def run_evals(agent: Agent, cases: list[EvalCase], ctx: ToolContext, meta: EvalM
         raise ValueError("repeat must be at least 1")
     results = []
     for case in cases:
-        result = CaseResult(id=case.id, category=case.category, question=case.question, expect=case.expected_statuses,
+        result = CaseResult(id=case.id, category=case.category, question=case.question,
+                            prior_turns=case.prior_turns, expect=case.expected_statuses,
                             runs=[_run_once(agent, case, ctx, now) for _ in range(repeat)])
         mean = sum(r.latency_s for r in result.runs) / repeat
         log(f"{'✓' if result.passed else '✗'} {case.id:<32} {result.passes}/{repeat}  {mean:.1f}s")

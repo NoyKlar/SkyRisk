@@ -8,7 +8,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Category = Literal["core_examples", "normal", "injection", "off_topic", "false_positive", "hebrew"]
+Category = Literal["core_examples", "normal", "follow_up", "injection", "off_topic", "false_positive", "hebrew"]
 Expect = Literal["answered", "refused_off_topic", "refused_injection", "needs_clarification"]
 Layer = Literal["deterministic", "classifier", "none"]
 
@@ -26,9 +26,12 @@ class EvalCase(BaseModel):
     id: str
     category: Category
     question: str
+    # Earlier user turns, asked in order in the same conversation before `question`. Only `question`'s
+    # reply is checked; a prior turn that is refused or errors fails the run, since the context is lost.
+    prior_turns: list[str] = Field(default_factory=list)
     expect: Expect | list[Expect]  # a list accepts any of several statuses
     layer: Layer | None = None
-    expect_tool: ExpectTool | None = None
+    expect_tool: ExpectTool | list[ExpectTool] | None = None  # a list passes if any one of them matches
     must_mention: list[str] = Field(default_factory=list)
     must_mention_in_order: list[str] = Field(default_factory=list)
 

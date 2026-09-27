@@ -138,7 +138,7 @@ It writes `evals/results/classifier-<timestamp>.*` (gitignored) and `classifier-
 3. When prompted, enter `ANTHROPIC_API_KEY` (required) and `OPENAI_API_KEY` (optional, for the fallback).
    - These are `sync: false` in `render.yaml`, so they live only in the Render dashboard and are never committed.
    - The `SKYRISK_*_MODEL` overrides from [section 3](#3-configure-env) can be added there too.
-4. Wait for the first build, then open `https://<service>.onrender.com`.
+4. Wait for the first build, then open the service URL (the live demo is at <https://skyrisk.onrender.com>).
    - Render checks `/api/health`.
    - Every push to the default branch redeploys.
 

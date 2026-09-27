@@ -16,7 +16,11 @@ def check_run(case: EvalCase, reply: AgentReply, ctx: ToolContext) -> list[str]:
         detail = f" ({reply.guardrail})" if reply.guardrail else ""
         reasons.append(f"status: expected {' or '.join(case.expected_statuses)}, got {reply.status}{detail}")
     if case.expect_tool is not None:
-        reasons += _check_tool(case.expect_tool, reply.tool_calls)
+        options = case.expect_tool if isinstance(case.expect_tool, list) else [case.expect_tool]
+        failures = [_check_tool(option, reply.tool_calls) for option in options]
+        if all(failures):
+            reasons += failures[0] if len(failures) == 1 else [
+                "expect_tool: none of the accepted calls was made (" + " | ".join(f[0] for f in failures) + ")"]
     if case.must_mention:
         haystack = "\n".join([reply.text, *reply.limitations]).lower()
         reasons += [f"must_mention: {s!r} not found" for s in case.must_mention if s.lower() not in haystack]
