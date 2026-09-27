@@ -1,5 +1,3 @@
-> **Status: IN PROGRESS (re-opened 2026-09-27 with an official TypeSafe key in `JEV_API_KEY`).** The original plan below is being implemented as written, with these changes: the key-verification call doubles as the recorded fixture, the default classifier stays `haiku` (Jev is the fallback), and nothing is pushed without the user's OK, because Render auto-deploys on push.
-
 # Jev Classifier + Measured Comparison — Shaping Notes
 
 ## Scope
@@ -29,7 +27,11 @@ Roadmap Phase 2, item 3. The user's requirements:
   - A band case with no working escalation is treated as in_scope.
   - If every classifier fails, the question is skipped with the "classifier skipped" warning.
 - **Cost gate**: every paid run is preceded by a dry-run call estimate and waits for the user's go-ahead.
-- `agent/core.py` stays unchanged. `Verdict` gains `decided_by` and `usage` for accounting only.
+- `agent/core.py` stays unchanged.
+- **Re-opened 2026-09-27 with an official key:**
+  - The key-verification call is also the recorded fixture (`tests/fixtures/jev_in_scope*.json`).
+  - The configured default stays `primary: haiku`, `fallback: jev`, because the deployed site has no `JEV_API_KEY`. The benchmark result is reported objectively in DESIGN.md §7, together with what it would take to switch.
+  - Commits stay local until the user approves a push, because Render auto-deploys on push. `Verdict` gains `decided_by` and `usage` for accounting only.
 
 ## Context
 

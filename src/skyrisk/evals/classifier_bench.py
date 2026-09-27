@@ -34,6 +34,7 @@ ESTIMATED_TOKENS: dict[str, tuple[int, int]] = {"haiku": (600, 60), "jev": (500,
 class BenchRun(BaseModel):
     label: str | None  # None when the classifier raised
     decided_by: str | None
+    reason: str | None = None  # the classifier's own reason; for Jev, the probabilities
     latency_s: float
     usage: list[CallUsage]
     error: str | None = None
@@ -110,6 +111,15 @@ def expected_label(case: EvalCase) -> str:
     return labels.pop()
 
 
+def has_expected_label(case: EvalCase) -> bool:
+    """False for cases such as `needs_clarification` ones, where no classifier label is right or wrong."""
+    try:
+        expected_label(case)
+    except ValueError:
+        return False
+    return True
+
+
 def estimate(cases: list[EvalCase], keys: list[str], repeat: int, *, escalation_possible: bool) -> list[str]:
     """Human-readable call and cost estimate for a run; makes no calls."""
     n = len(cases) * repeat
@@ -151,7 +161,7 @@ def _run_once(classifier: Classifier, question: str, now: Callable[[], float]) -
     except Exception as e:  # noqa: BLE001 - one failed call must not stop the benchmark
         return BenchRun(label=None, decided_by=None, latency_s=now() - start, usage=[],
                         error=f"{type(e).__name__}: {e}")
-    return BenchRun(label=v.label, decided_by=v.decided_by, latency_s=now() - start, usage=v.usage)
+    return BenchRun(label=v.label, decided_by=v.decided_by, reason=v.reason, latency_s=now() - start, usage=v.usage)
 
 
 def run_bench(classifiers: Mapping[str, Classifier], cases: list[EvalCase], *, repeat: int, max_input_chars: int,
@@ -275,10 +285,20 @@ def render_markdown(report: BenchReport) -> str:
         marker = "" if case.reaches_classifier else " (regex)"
         lines.append(f"| `{case.id}`{marker} | {case.expected} | " + " | ".join(cells) + " |")
 
+    wrong = [(r.key, c.id, run.label, run.reason) for r in rs for c in r.cases for run in c.runs
+             if run.label is not None and run.label != c.expected]
+    if wrong:
+        lines += ["", "## Wrong labels", ""] + [f"- `{k}` `{cid}` labelled {label}: {_cell(reason or '')}"
+                                                for k, cid, label, reason in wrong]
+
     errors = [(r.key, c.id, run.error) for r in rs for c in r.cases for run in c.runs if run.error]
     if errors:
         lines += ["", "## Errors", ""] + [f"- `{k}` `{cid}`: {e}" for k, cid, e in errors]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _cell(text: str) -> str:
+    return text.replace("|", "\\|").replace("\n", " ")
 
 
 def write_reports(report: BenchReport, out_dir: Path, stamp: str) -> Path:

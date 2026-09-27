@@ -27,7 +27,9 @@ cp .env.example .env
 |---|---|---|
 | `ANTHROPIC_API_KEY` | yes (for the agent) | primary model (Claude Sonnet 5) and the Haiku guardrail classifier |
 | `OPENAI_API_KEY` | no | fallback model (`gpt-6-luna`). Without it, the agent runs with no fallback. |
-| `SKYRISK_PRIMARY_MODEL`, `SKYRISK_FALLBACK_MODEL`, `SKYRISK_CLASSIFIER_MODEL` | no | override the model ids in `config/agent.yaml` |
+| `JEV_API_KEY` | no | TypeSafe Jev, the fallback guardrail classifier. Without it, the classifier is Haiku alone. |
+| `SKYRISK_PRIMARY_MODEL`, `SKYRISK_FALLBACK_MODEL`, `SKYRISK_CLASSIFIER_MODEL` | no | override the model ids in `config/agent.yaml` (`SKYRISK_CLASSIFIER_MODEL` is the Haiku classifier model) |
+| `SKYRISK_CLASSIFIER` | no | `haiku` (default) or `jev`: which classifier runs first. The other one is the fallback. |
 
 `.env` is gitignored. Ingest, score, show and the offline tests need no keys.
 
@@ -112,6 +114,16 @@ uv run skyrisk eval --case 'offtopic-*'    # filter by case id glob (repeatable)
 
 Run `uv run skyrisk eval --repeat 3` before merging any change to the system prompt, tools, guardrails or model ids, and treat a non-zero exit as a blocker. The command can run unchanged as a CI step, given the API key as a secret and a scored database.
 
+**Classifier benchmark.** `skyrisk eval-classifier` calls the guardrail classifiers directly, with no agent model, on the `injection`, `off_topic`, `false_positive` and `hebrew` cases. It compares them side by side: false-positive and miss rates, per-category accuracy, escalations, latency, and cost per 1k questions. Results and the decision are in `docs/DESIGN.md` §7.
+
+```bash
+uv run skyrisk eval-classifier --repeat 3 --dry-run   # print the call and cost estimate, make no calls
+uv run skyrisk eval-classifier --repeat 3             # both classifiers (needs ANTHROPIC_API_KEY and JEV_API_KEY)
+uv run skyrisk eval-classifier --classifier jev --category normal
+```
+
+It writes `evals/results/classifier-<timestamp>.*` (gitignored) and `classifier-latest.md`/`.json` (committed). A `--repeat 3` run of both classifiers makes 126–189 calls and costs about $0.05–0.11.
+
 **Cost.** Deterministic injection cases make no model calls. Every other run makes one Haiku classifier call. Runs that reach the agent also make roughly 2–4 Sonnet calls: tool rounds plus the final answer. A full `--repeat 3` run costs about 85 Haiku calls and 100–250 Sonnet calls.
 
 ## 9. Deployment (Render)
@@ -184,9 +196,9 @@ Run `uv run skyrisk eval --repeat 3` before merging any change to the system pro
 
 ```
 config/        hubs, scoring weights/thresholds (versioned), agent/model settings
-evals/         cases.yaml + results/latest.{md,json}
-src/skyrisk/   ingest/ (API clients), scoring/ (pure engine), agent/ (tools, guardrails, providers, loop),
-               api/ (FastAPI + static chat page), evals/ (runner, checks, report), cli.py
+evals/         cases.yaml + results/latest.{md,json}, results/classifier-latest.{md,json}
+src/skyrisk/   ingest/ (API clients), scoring/ (pure engine), agent/ (tools, guardrails, Jev classifier, providers, loop),
+               api/ (FastAPI + static chat page), evals/ (runner, checks, report, classifier benchmark), cli.py
 tests/         offline tests with recorded fixtures and a scripted fake LLM provider
 docs/          DESIGN.md
 render.yaml    Render Blueprint (build: ingest + score; start: serve)

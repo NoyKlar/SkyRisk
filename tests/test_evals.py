@@ -233,6 +233,7 @@ def test_classifier_bench_metrics_and_report(tmp_path):
     assert path.name == "classifier-20260927-230000.md"
     text = (tmp_path / "classifier-latest.md").read_text()
     assert "| Misses (production) | 2/4 (50%) |" in text and "`regex` (regex)" in text
+    assert "- `jev` `poem` labelled injection: poetry" in text
 
 
 def test_classifier_bench_estimate_counts_calls():
@@ -245,3 +246,5 @@ def test_classifier_bench_estimate_counts_calls():
 def test_expected_label_requires_a_single_classifier_label():
     with pytest.raises(ValueError):
         classifier_bench.expected_label(_case(expect="needs_clarification"))
+    assert not classifier_bench.has_expected_label(_case(expect="needs_clarification"))
+    assert classifier_bench.has_expected_label(_case(expect=["answered", "needs_clarification"]))

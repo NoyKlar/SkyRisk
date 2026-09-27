@@ -246,6 +246,10 @@ def _eval_classifier(config_dir: Path, args: argparse.Namespace) -> int:
     keys = args.classifiers or [k for k in CLASSIFIER_NAMES if k != "jev" or config.classifier.jev is not None]
     categories = args.categories or list(classifier_bench.DEFAULT_CATEGORIES)
     cases = [c for c in load_cases(args.cases) if c.category in categories]
+    skipped = [c.id for c in cases if not classifier_bench.has_expected_label(c)]
+    if skipped:
+        print(f"Skipping case(s) with no classifier label to check: {', '.join(skipped)}")
+        cases = [c for c in cases if c.id not in skipped]
     if not cases:
         print("No eval cases match the filters.", file=sys.stderr)
         return 2
