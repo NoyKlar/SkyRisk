@@ -200,6 +200,50 @@ fetch("/api/hubs")
   .then(renderHubs)
   .catch(() => { /* the panel is a convenience; chat works without it */ });
 
+function timeAgo(iso) {
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!Number.isFinite(minutes) || minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} h ago`;
+  return `${Math.round(hours / 24)} days ago`;
+}
+
+function alertChange(a) {
+  return `${Math.round(a.prev_score)} → ${Math.round(a.new_score)}`;
+}
+
+function renderAlerts(data) {
+  const list = document.getElementById("alerts-list");
+  list.replaceChildren();
+  for (const a of data.alerts) {
+    const item = el("li", "alert");
+    item.title = `${a.reason}; ${a.detail}`;
+    const head = el("div", "alert-head");
+    head.appendChild(el("span", "", a.city));
+    head.appendChild(el("span", `level ${a.new_level}`, a.new_level));
+    if (a.demo) head.appendChild(el("span", "demo-badge", "demo"));
+    item.appendChild(head);
+    item.appendChild(el("div", "alert-change", `${alertChange(a)} · ${timeAgo(a.created_at)}`));
+    item.appendChild(el("div", "", a.detail));
+    list.appendChild(item);
+  }
+  document.getElementById("alerts-empty").hidden = data.alerts.length > 0;
+
+  const line = document.getElementById("alerts-line");
+  const latest = data.alerts[0];
+  if (latest) {
+    line.textContent = `Latest alert: ${latest.city} ${alertChange(latest)} (${latest.new_level})` +
+      `${latest.demo ? " · demo" : ""} · ${timeAgo(latest.created_at)}`;
+    line.hidden = false;
+  }
+}
+
+fetch("/api/alerts?limit=10")
+  .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+  .then(renderAlerts)
+  .catch(() => { /* alerts are informational; chat works without them */ });
+
 for (const chip of document.querySelectorAll(".chip")) {
   chip.addEventListener("click", () => ask(chip.querySelector("span").textContent));
 }

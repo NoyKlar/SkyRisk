@@ -10,6 +10,11 @@
   <aside id="hubs-panel" class="hubs-panel" aria-label="Hubs you can ask about" hidden>
     <h2 class="panel-title">Hubs you can ask about</h2>
     <div id="hubs-groups"></div>
+    <section id="alerts" class="alerts" aria-label="Recent near-term risk alerts">
+      <h2 class="panel-title">Recent alerts</h2>
+      <ul id="alerts-list" class="alerts-list"></ul>
+      <p id="alerts-empty" class="alerts-empty" hidden>No alerts yet. A forecast check runs daily.</p>
+    </section>
   </aside>
 
   <div id="app" class="app">
@@ -33,8 +38,9 @@
     <main id="thread" class="thread" aria-live="polite">
       <section id="empty" class="welcome">
         <h2 class="welcome-title">Ask about hub weather exposure</h2>
-        <p class="welcome-context"><span id="hub-count">US hubs</span> · Open-Meteo 2016–2025 + FEMA NRI · deterministic scoring</p>
+        <p class="welcome-context"><span id="hub-count">US hubs</span> · Open-Meteo 2016–2025 + FEMA NRI + 7-day forecast · deterministic scoring</p>
         <p id="hubs-line" class="hubs-line" dir="auto" hidden></p>
+        <p id="alerts-line" class="alerts-line" hidden></p>
         <div class="chips">
           <button class="chip" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2"/></svg>
@@ -51,6 +57,10 @@
           <button class="chip" type="button">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>
             <span>Why is the Dallas hub's weather disruption risk high?</span>
+          </button>
+          <button class="chip" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17a5 5 0 1 1 1.5-9.8A6 6 0 0 1 20 10a4 4 0 0 1-1 7.9M13 13l-2 4h3l-2 4"/></svg>
+            <span>What's the near-term risk for Houston this week?</span>
           </button>
         </div>
       </section>

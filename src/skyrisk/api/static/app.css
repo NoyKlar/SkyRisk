@@ -11,6 +11,7 @@
   --accent: #5b9bff;
   --accent-hover: #74abff;
   --warn: #e0a84c;
+  --danger: #ef7a6f;
   --neutral: #8595a8;
   --radius: 10px;
   color-scheme: dark;
@@ -76,6 +77,30 @@ body {
 
 .hubs-line { margin: -12px 0 18px; color: var(--muted); font-size: 12px; }
 
+/* Recent near-term alerts: in the side panel on wide screens, one line in the welcome otherwise. */
+.alerts { margin-top: 28px; }
+.alerts-list { margin: 0; padding: 0; list-style: none; }
+.alert { padding: 6px 8px; border-radius: 6px; font-size: 12px; color: var(--muted); }
+.alert + .alert { margin-top: 4px; }
+.alert-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text); font-size: 13px; }
+.alert-change { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.alerts-empty { margin: 0; padding: 0 8px; color: var(--muted); font-size: 12px; }
+.level, .demo-badge {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.level.low { color: var(--neutral); border: 1px solid var(--border-strong); }
+.level.medium { color: var(--warn); border: 1px solid var(--warn); }
+.level.high { color: var(--danger); border: 1px solid var(--danger); }
+.demo-badge { color: var(--accent); border: 1px dashed var(--accent); }
+.alerts-line { margin: -10px 0 18px; color: var(--muted); font-size: 12px; }
+
 @media (min-width: 1388px) {
   .hubs-panel {
     display: block;
@@ -88,7 +113,7 @@ body {
     padding: 24px 16px;
     background: linear-gradient(to bottom, transparent, var(--border) 12%, var(--border) 88%, transparent) right / 1px 100% no-repeat;
   }
-  .hubs-line { display: none; }
+  .hubs-line, .alerts-line { display: none; }
 }
 
 .header {
