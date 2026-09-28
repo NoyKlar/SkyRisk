@@ -44,17 +44,19 @@ cases:
   - id: history-2026
     category: core_examples
     question: How many snow days did Denver have in 2026?
-    # Answered from 2026 year-to-date data, labelled partial with the exact period (starts 2026-01-01).
+    # Answered from 2026 year-to-date data, labelled partial with the period. The period starts on Jan 1;
+    # "Jan" matches "Jan 1" and "January 1" (answers don't use ISO dates). The end date moves daily, so
+    # it is not pinned; the expect_tool year carries the check that 2026 data was used.
     expect: answered
     expect_tool: {name: weather_stat, arguments: {hub_ids: [denver], stat: snow_day, year: 2026}}
-    must_mention: ["2026-01-01", "partial"]
+    must_mention: ["2026", "Jan", "partial"]
   - id: history-this-year
     category: core_examples
     question: What percentage of days this year in Houston had heavy rain?
     # "This year" = 2026 year-to-date.
     expect: answered
     expect_tool: {name: weather_stat, arguments: {hub_ids: [houston], stat: heavy_rain, year: 2026}}
-    must_mention: ["2026-01-01"]
+    must_mention: ["2026", "Jan"]
   - id: history-2026-score
     category: core_examples
     question: What is Denver's 2026 risk score?

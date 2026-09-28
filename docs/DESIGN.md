@@ -1,5 +1,51 @@
 # SkyRisk — Design
 
+## At a glance
+
+A one-page summary. Each item links to its full section below.
+
+**[System architecture](#1-system-architecture).** An offline pipeline (`skyrisk ingest` and `score`) fetches Open-Meteo and FEMA NRI data into SQLite and computes versioned score runs with pure functions. At runtime a FastAPI service hosts the chat page and JSON API. The agent (Sonnet 5 primary, OpenAI fallback, Haiku classifier) answers only through six deterministic tools. A near-term layer scores the 7-day forecast, and a daily GitHub Actions cron runs the alert check.
+
+**[Repository structure](#2-repository-structure).**
+```
+config/     hubs, scoring, near-term and agent YAML (versioned)
+data/       skyrisk.db (gitignored cache and score runs)
+docs/       this document
+evals/      cases.yaml and committed results
+src/skyrisk/  ingest, scoring, nearterm, history, agent, api, evals, cli
+tests/      offline tests and recorded API fixtures
+agent-os/   product docs, standards, per-feature specs
+render.yaml, .github/workflows/  deployment and the daily alert check
+```
+
+**[Data storage choice](#3-data-storage-choice-sqlite).** One SQLite file holds hubs, cached weather and NRI data, every score run with its config and data hashes, and near-term snapshots and alerts. It needs no setup, fits the data size (~50k rows) and makes every answer traceable. The tradeoff: storage is ephemeral on Render's free tier, and production would use Postgres.
+
+**[Scoring methodology](#4-scoring-methodology).**
+- Historical exposure: threshold-day counts from full years 2016–2025 plus FEMA NRI annual frequencies. Each metric is min-max scaled across the 13 hubs, then combined into five weighted hazards (winter, hurricane, flood, tornado, heat) and an overall score. The result is a relative ranking, not a probability.
+- Near-term risk: a separate, absolute 0–100 score from the 7-day forecast, with low/medium/high levels and alerts (§12).
+- 2026 appears only as partial year-to-date weather stats, never scored. The window rolls each January under a versioned, eval-gated refresh policy.
+
+**[Why an LLM](#5-why-an-llm-and-what-it-adds).** The LLM turns messy questions (regions, "last year", follow-ups, unknown hubs) into the right tool calls. It then explains the results in plain language and states the limits that apply. It never produces a number: a grounding check rejects any score a tool did not return.
+
+**[System prompt](#6-system-prompt).** Built from config at startup. It covers:
+- the scope and injection rules
+- numbers only from tools
+- the two score scales kept apart
+- the time rules (full years 2016–2025, 2026 year-to-date only)
+- limitations and style
+
+**[Evaluation set and results](#7-evaluation-set-and-results).** 43 real-model cases: normal, follow-up, near-term, injection, off-topic, look-alike and Hebrew.
+- Full gate, run on the previous version (42 cases): 42/42 on both the normal and outage paths (126/126 runs each), with 0 false positives, 0 misses and 0 grounding failures.
+- After the 2026 change: `history-*` 3/3 (9/9 runs).
+
+**[Key tradeoffs](#8-key-tradeoffs).**
+- **Only deterministic tools produce numbers.** This makes answers reproducible and defensible; the agent cannot answer beyond what the tools cover.
+- **Relative historical score.** It matches the "which few hubs to fund" decision; adding a hub shifts every score.
+- **Two separate scores.** Stable history for investment, an absolute forecast for this week; the cost is two scales to explain.
+- **SQLite on a free Render service.** Zero cost and zero setup; the price is ephemeral alert history and cold starts.
+
+---
+
 SkyRisk helps risk and operations analysts at a US logistics company decide which distribution hubs need weather-resilience investment first. It scores 13 hubs on five hazards from public data with transparent, deterministic code. A conversational agent then answers questions about those scores in plain language: rankings, comparisons, "why is this hub high", and historical weather stats.
 
 Each hub has two separate scores:
@@ -332,7 +378,7 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 
 ## 7. Evaluation set and results
 
-**The set:** [`evals/cases.yaml`](../evals/cases.yaml), with 42 cases in eight categories. The full-set runs reported below used the first 33. The 3 `follow_up` cases, then the 4 `near_term` cases and 2 more `core_examples` about 2026, were added later ("Multi-turn follow-ups" and "Near-term and 2026 cases" below).
+**The set:** [`evals/cases.yaml`](../evals/cases.yaml), with 43 cases in eight categories. The full-set runs reported below used the first 33. The 3 `follow_up` cases, then the 4 `near_term` cases and 2 more `core_examples` about 2026, were added later, and `history-2026-score` last ("Multi-turn follow-ups" and "Near-term and 2026 cases" below). **The full gate was last run on the previous version (42 cases, before 2026 year-to-date): 42/42 on both the normal and outage paths.** After the 2026 year-to-date change only the `history-*` cases were re-run (below).
 
 | Category | What it tests |
 |---|---|
@@ -581,6 +627,11 @@ These were the 2026 expectations when 2026 was fully excluded. With 2026 year-to
 | `history-2026` | How many snow days did Denver have in 2026? | answered; `weather_stat(hub_ids=[denver], stat=snow_day, year=2026)`; mention "2026-01-01" and "partial" |
 | `history-this-year` | What percentage of days this year in Houston had heavy rain? | answered; `weather_stat(hub_ids=[houston], stat=heavy_rain, year=2026)`; mention "2026-01-01" |
 | `history-2026-score` | What is Denver's 2026 risk score? | answered or needs_clarification; mention "2025"; grounding catches any invented score |
+
+**2026 year-to-date results** (2026-09-28, `uv run skyrisk eval --case 'history-*' --repeat 3 --report-name history-ytd`; report: [`history-ytd-latest.md`](../evals/results/history-ytd-latest.md)): **3/3 cases, 9/9 runs**, 0 false positives, 0 grounding failures, p50 10.3 s, 18 Sonnet + 9 Haiku calls, $0.083. Only these cases were re-run; the full gate (42/42 on both paths, below) predates this change.
+- `history-2026` and `history-this-year` called `weather_stat` with `year: 2026` in every run. Every answer said "so far in 2026" or "year-to-date", gave the period Jan 1 – Sep 26, and said it is not a full-year figure or a risk score. Denver: 9 snow days; Houston: heavy rain on 2.23% of days (6 of 269). Both match the tool output.
+- `history-2026-score` said there is no 2026 risk score because scores cover full years 2016–2025. It offered Denver's 2016–2025 score (`rank_hubs`) or year-to-date stats instead, and invented no number.
+- **Case change after the first run.** The first run passed only `history-2026-score` (1/3 cases, $0.102). The other 6 answers were correct but wrote the period as "Jan 1 – Sep 26" instead of the ISO `2026-01-01` the cases required. The cases now require "2026" and "Jan" (which matches "Jan 1" and "January 1"); the end date moves daily, so it is not pinned, and `expect_tool` still checks that 2026 data was used. The agent and prompt were not changed between the two runs.
 
 The forecast is live, so the near-term cases check tools and wording, not values. Any `near_term` score an answer cites is still re-checked against the forecast service (the same 1 h cache the tool just used).
 

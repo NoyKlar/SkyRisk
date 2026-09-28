@@ -16,3 +16,5 @@ evals/results/*
 !evals/results/followup-latest.json
 !evals/results/gate-rerun-latest.md
 !evals/results/gate-rerun-latest.json
+!evals/results/history-ytd-latest.md
+!evals/results/history-ytd-latest.json

@@ -1,0 +1,431 @@
+{
+  "meta": {
+    "started_at": "2026-09-28T11:28:50+03:00",
+    "primary_model": "anthropic:claude-sonnet-5",
+    "fallback_model": "openai:gpt-6-luna",
+    "classifier_model": "anthropic:claude-haiku-4-5",
+    "score_run_id": 7,
+    "scoring_config_version": "1.2",
+    "simulated_outage": null
+  },
+  "repeat": 3,
+  "cases": [
+    {
+      "id": "history-2026",
+      "category": "core_examples",
+      "question": "How many snow days did Denver have in 2026?",
+      "prior_turns": [],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 13.064154374995269,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 449,
+              "output_tokens": 60,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 88,
+              "output_tokens": 213,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 583,
+              "output_tokens": 347,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "So far in 2026, Denver has had 9 snow days (days with snowfall ≥1 cm), covering January 1 through September 26, 2026 — the latest complete data available. This is year-to-date only, not a full-year figure, so it can't be compared directly to full-year snow-day counts from 2016-2025, and it isn't part of Denver's risk score."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 11.315466250060126,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 449,
+              "output_tokens": 73,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 88,
+              "output_tokens": 182,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 552,
+              "output_tokens": 332,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "So far in 2026 (Jan 1 – Sep 26, the latest data available), Denver has had 9 days with measurable snowfall (≥1 cm). This is a year-to-date count, not a full-year total or a risk score — 2026 data is still incomplete, so it can't be compared directly to full-year figures from 2016-2025."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 10.102388917002827,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 449,
+              "output_tokens": 60,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 88,
+              "output_tokens": 182,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 552,
+              "output_tokens": 316,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Denver had 9 snow days so far in 2026 (snowfall ≥1cm), covering Jan 1 – Sep 26, 2026 (the latest complete data from the Open-Meteo archive). This is a year-to-date count, not a full-year total or a risk score, so it can't be compared directly to full-year figures from 2016-2025."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "history-this-year",
+      "category": "core_examples",
+      "question": "What percentage of days this year in Houston had heavy rain?",
+      "prior_turns": [],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 12.265433041960932,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 449,
+              "output_tokens": 48,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 92,
+              "output_tokens": 182,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 534,
+              "output_tokens": 329,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "So far in 2026 (Jan 1 – Sep 26), Houston recorded heavy rain (≥50mm precipitation) on about 2.23% of days — 6 days out of 269 days with data. Note this is year-to-date, not a full-year figure, and isn't part of the historical risk score."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 11.630205500056036,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 449,
+              "output_tokens": 50,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 92,
+              "output_tokens": 199,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 550,
+              "output_tokens": 294,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "So far in 2026 (Jan 1 – Sep 26), Houston had heavy rain (≥50mm precipitation in a day) on about 2.23% of days — 6 days out of 269 days with data. This is year-to-date only, not a full-year figure and not a risk score."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 10.349410125054419,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 449,
+              "output_tokens": 49,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 92,
+              "output_tokens": 190,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 543,
+              "output_tokens": 287,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "So far in 2026 (Jan 1 – Sep 26), Houston has had heavy rain (≥50 mm precipitation) on 2.23% of days — 6 out of 269 days with data. Note this is year-to-date, not a full-year figure, and isn't a risk score."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "history-2026-score",
+      "category": "core_examples",
+      "question": "What is Denver's 2026 risk score?",
+      "prior_turns": [],
+      "expect": [
+        "answered",
+        "needs_clarification"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 10.184632958029397,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "rank_hubs"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 448,
+              "output_tokens": 57,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 87,
+              "output_tokens": 222,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1137,
+              "output_tokens": 441,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "There is no 2026 risk score for Denver — SkyRisk's historical risk scores only cover full calendar years 2016-2025, and 2026 isn't complete yet, so no score or rank can be computed or estimated for it. For reference, Denver's historical overall relative risk score (2016-2025) is 19.49, ranking it 11th of 13 hubs (least exposed among the group). If you want, I can pull Denver's near-term 7-day forecast risk (a different, absolute measure) or year-to-date 2026 weather statistics (not a risk score) instead."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 9.329719666973688,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 448,
+              "output_tokens": 59,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 87,
+              "output_tokens": 246,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 591,
+              "output_tokens": 403,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Denver doesn't have a 2026 risk score. SkyRisk's historical risk scores only cover full calendar years 2016-2025, so 2026 (still in progress) can't be scored or ranked yet. What I can offer instead: year-to-date weather stats for 2026 (e.g., through Sep 26, Denver had snowfall on about 3.35% of days, 9 of 269 days with data) — but these are raw counts, not risk scores, and shouldn't be compared to full-year figures. If you want Denver's actual risk standing, I can pull its 2025 (last full year) or 2016-2025 overall score instead."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 8.999231249908917,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 448,
+              "output_tokens": 45,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 87,
+              "output_tokens": 243,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 616,
+              "output_tokens": 348,
+              "cache_read_tokens": 3929,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Denver doesn't have a 2026 risk score. SkyRisk's historical risk scores only cover full calendar years 2016-2025, so 2026 (a partial, in-progress year) can't be scored or ranked. If you want a sense of 2026 so far, I can pull year-to-date weather stats (e.g., extreme-heat days) for Denver, but these are raw counts, not risk scores. For a directly comparable historical figure, I'd suggest using Denver's 2025 score (the latest full year) or its overall relative ranking across 2016-2025."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    }
+  ],
+  "categories": [
+    {
+      "category": "core_examples",
+      "cases": 3,
+      "passed": 3,
+      "runs": 9,
+      "runs_passed": 9
+    }
+  ],
+  "guardrails": {
+    "in_scope_runs": 9,
+    "in_scope_refused": 0,
+    "false_positives_by_layer": {},
+    "must_refuse_runs": 0,
+    "must_refuse_answered": 0,
+    "false_positive_rate": 0.0,
+    "miss_rate": 0.0
+  },
+  "latency": {
+    "p50_s": 10.349410125054419,
+    "p95_s": 13.064154374995269,
+    "max_s": 13.064154374995269
+  },
+  "served_by": {
+    "anthropic:claude-sonnet-5": 9
+  },
+  "reliability": {
+    "error_runs": 0,
+    "grounding_failures": 0
+  },
+  "cost": {
+    "total_usd": 0.08316539999999997,
+    "per_run_usd": 0.009240599999999996,
+    "calls_by_model": {
+      "claude-haiku-4-5": 9,
+      "claude-sonnet-5": 18
+    },
+    "unpriced_models": []
+  },
+  "passed": true,
+  "cases_passed": 3
+}
