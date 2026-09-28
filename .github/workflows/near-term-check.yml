@@ -25,6 +25,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: POST /api/alerts/check
+        # Explicit `shell: bash` adds -o pipefail, so a curl failure is not hidden by the pipe into tee.
+        shell: bash
         env:
           ALERT_TOKEN: ${{ secrets.ALERT_TOKEN }}
           SKYRISK_URL: ${{ vars.SKYRISK_URL || 'https://skyrisk.onrender.com' }}
@@ -32,8 +34,10 @@ jobs:
         run: |
           if [ -z "$ALERT_TOKEN" ]; then echo "::error::ALERT_TOKEN secret is not set"; exit 1; fi
           if [ -n "$DEMO_HUB" ]; then body="{\"demo_hub\": \"$DEMO_HUB\"}"; else body="{}"; fi
-          # Retries ride out the free tier's 30-60 s cold start.
-          curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 180 \
+          # Retries ride out the free tier's 30-60 s cold start: --retry covers timeouts, 408, 429, 500, 502, 503
+          # and 504, and --retry-connrefused covers a refused connection. Any other 4xx (400 bad demo_hub,
+          # 401 wrong token) fails at once, and --fail-with-body prints the server's reason.
+          curl -sS --fail-with-body --retry 4 --retry-delay 30 --retry-connrefused --max-time 180 \
             -X POST "$SKYRISK_URL/api/alerts/check" \
             -H "Authorization: Bearer $ALERT_TOKEN" -H "Content-Type: application/json" \
             -d "$body" | tee result.json
