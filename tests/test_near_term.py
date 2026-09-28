@@ -208,6 +208,19 @@ def test_service_failure_is_unavailable():
         fake_service(fail={"houston"}).score("houston")
 
 
+def test_levels_use_the_cache_and_keep_going_past_a_failing_hub():
+    calls = []
+    service = fake_service({"denver": forecast({0: {"snowfall_cm": 15.0}})}, calls=calls, fail={"miami"})
+    levels = {lv.hub_id: lv for lv in service.levels()}
+    assert list(levels) == [h.id for h in REGISTRY.hubs]
+    assert (levels["denver"].score, levels["denver"].level) == (70.0, "high")
+    assert levels["denver"].forecast_start == START and levels["houston"].level == "low"
+    assert levels["miami"].level is None and levels["miami"].score is None and "miami" in levels["miami"].error
+    fetched = len(calls)
+    service.levels()
+    assert len(calls) == fetched + 1  # only the failing hub is retried; the rest come from the cache
+
+
 # --- tool ---------------------------------------------------------------------------------
 
 def test_near_term_tool_for_one_hub(tool_ctx):

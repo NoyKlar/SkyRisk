@@ -211,3 +211,12 @@ def test_check_fails_when_no_forecast_can_be_fetched(api):
     s.service._fetch = lambda hub: (_ for _ in ()).throw(httpx.ConnectError("down"))
     res = make().post("/api/alerts/check", headers=AUTH)
     assert res.status_code == 502 and res.json()["errors"]
+
+
+def test_near_term_levels_endpoint(api):
+    make, s = api
+    s.set("houston", STORM)
+    body = make().get("/api/near-term").json()
+    levels = {h["hub_id"]: h["level"] for h in body["hubs"]}
+    assert len(levels) == len(REGISTRY.hubs) and levels["houston"] == "high" and levels["denver"] == "low"
+    assert body["cache_ttl_s"] == CFG.cache_ttl_s

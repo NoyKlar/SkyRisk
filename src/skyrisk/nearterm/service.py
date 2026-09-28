@@ -8,17 +8,19 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
-from skyrisk.config import Hub, HubRegistry, NearTermConfig
+from skyrisk.config import Hub, HubRegistry, Level, NearTermConfig
 from skyrisk.models import WeatherDay
 from skyrisk.nearterm.engine import NearTermScore, score_forecast
 
 Fetch = Callable[[Hub], list[WeatherDay]]
+LEVELS_WORKERS = 4  # a cold cache fetches all hubs; a few at a time keeps it quick and polite to Open-Meteo
 
 
 def utc_now() -> datetime:
@@ -35,6 +37,16 @@ class HubNearTerm:
     fetched_at: datetime
     days: list[WeatherDay]
     result: NearTermScore
+
+
+class HubLevel(BaseModel):
+    """One hub's current near-term level for the hubs list; score and level are None when unavailable."""
+    hub_id: str
+    score: float | None
+    level: Level | None
+    forecast_start: date | None = None
+    forecast_end: date | None = None
+    error: str | None = None
 
 
 class NearTermService:
@@ -56,6 +68,19 @@ class NearTermService:
 
     def score_all(self, *, fresh: bool = False) -> list[HubNearTerm]:
         return [self.score(h.id, fresh=fresh) for h in self.registry.hubs]
+
+    def levels(self) -> list[HubLevel]:
+        """Every hub's level from the cache (never fresh), in registry order; a failing hub gets an error."""
+        def one(hub: Hub) -> HubLevel:
+            try:
+                r = self.score(hub.id).result
+            except NearTermUnavailable as e:
+                return HubLevel(hub_id=hub.id, score=None, level=None, error=str(e))
+            return HubLevel(hub_id=hub.id, score=r.score, level=r.level,
+                            forecast_start=r.forecast_start, forecast_end=r.forecast_end)
+
+        with ThreadPoolExecutor(max_workers=LEVELS_WORKERS) as pool:
+            return list(pool.map(one, self.registry.hubs))
 
     def _forecast(self, hub_id: str, *, fresh: bool) -> tuple[datetime, list[WeatherDay]]:
         hub = self.registry.get(hub_id)

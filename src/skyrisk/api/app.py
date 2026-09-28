@@ -17,6 +17,7 @@ from skyrisk.api.ratelimit import RateLimiter
 from skyrisk.api.sessions import SessionStore
 from skyrisk.nearterm import alerts as nt_alerts
 from skyrisk.nearterm.alerts import Alert, CheckResult, Notify
+from skyrisk.nearterm.service import HubLevel
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_MESSAGE_CHARS = 10_000  # transport cap; the agent's own limit produces the friendly message
@@ -50,6 +51,11 @@ class AlertView(Alert):
 class AlertsResponse(BaseModel):
     alerts: list[AlertView]
     last_check_at: str | None = Field(description="When the last (non-demo) check ran; None since the last restart")
+
+
+class NearTermLevels(BaseModel):
+    hubs: list[HubLevel]
+    cache_ttl_s: float = Field(description="Forecasts are reused for this long, so levels can be up to this old")
 
 
 def client_ip(request: Request) -> str:
@@ -145,6 +151,14 @@ def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: L
             alerts=[AlertView(**a.model_dump(), city=cities.get(a.hub_id, a.hub_id)) for a in found],
             last_check_at=db.last_check_at(ctx.conn),
         )
+
+    @app.get("/api/near-term", responses={503: {"description": "The near-term forecast is not configured"}})
+    def near_term_levels() -> NearTermLevels:  # or an error JSONResponse
+        # Public: the 1 h forecast cache bounds outbound calls to about one per hub per hour.
+        if ctx.near_term is None:
+            return JSONResponse({"detail": "The near-term forecast is not configured on this server."},
+                                status_code=503)
+        return NearTermLevels(hubs=ctx.near_term.levels(), cache_ttl_s=ctx.near_term.cfg.cache_ttl_s)
 
     @app.get("/api/health")
     def health() -> dict:

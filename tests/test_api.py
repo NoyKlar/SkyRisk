@@ -190,3 +190,9 @@ def test_without_limiter_requests_are_not_limited(api_ctx):
     client, _ = _client(api_ctx, provider)
     for _ in range(5):
         assert _post(client, "1.1.1.1").status_code == 200
+
+
+def test_near_term_levels_unavailable_without_the_service(api_ctx):
+    client, _ = _client(api_ctx, FakeProvider())
+    res = client.get("/api/near-term")
+    assert res.status_code == 503 and "not configured" in res.json()["detail"]
