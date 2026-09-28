@@ -181,6 +181,10 @@ function renderHubs(hubs) {
       button.addEventListener("click", () => insertHub(hub.city));
       const li = el("li");
       li.appendChild(button);
+      const badge = el("span", "level nt-badge", "–");
+      badge.dataset.hub = hub.hub_id;
+      badge.title = "Near-term forecast loading";
+      li.appendChild(badge);
       list.appendChild(li);
     }
     group.appendChild(list);
@@ -195,9 +199,34 @@ function renderHubs(hubs) {
   line.hidden = false;
 }
 
+function renderNearTerm(data) {
+  for (const h of data.hubs) {
+    const badge = document.querySelector(`.nt-badge[data-hub="${CSS.escape(h.hub_id)}"]`);
+    if (!badge) continue;
+    if (h.level) {
+      badge.className = `level nt-badge ${h.level}`;
+      badge.textContent = h.level;
+      badge.title = `Near-term ${Math.round(h.score)} (${h.level}), ${h.forecast_start} – ${h.forecast_end}`;
+    } else {
+      badge.title = "Forecast unavailable";
+    }
+  }
+}
+
+function markNearTermUnavailable() {
+  for (const badge of document.querySelectorAll(".nt-badge")) badge.title = "Forecast unavailable";
+}
+
 fetch("/api/hubs")
   .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-  .then(renderHubs)
+  .then((hubs) => {
+    renderHubs(hubs);
+    // The badges fill in later: a cold forecast cache takes a few seconds.
+    fetch("/api/near-term")
+      .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
+      .then(renderNearTerm)
+      .catch(markNearTermUnavailable);
+  })
   .catch(() => { /* the panel is a convenience; chat works without it */ });
 
 function timeAgo(iso) {
@@ -229,14 +258,7 @@ function renderAlerts(data) {
     list.appendChild(item);
   }
   document.getElementById("alerts-empty").hidden = data.alerts.length > 0;
-
-  const line = document.getElementById("alerts-line");
-  const latest = data.alerts[0];
-  if (latest) {
-    line.textContent = `Latest alert: ${latest.city} ${alertChange(latest)} (${latest.new_level})` +
-      `${latest.demo ? " · demo" : ""} · ${timeAgo(latest.created_at)}`;
-    line.hidden = false;
-  }
+  document.getElementById("alerts-panel").hidden = false;
 }
 
 fetch("/api/alerts?limit=10")

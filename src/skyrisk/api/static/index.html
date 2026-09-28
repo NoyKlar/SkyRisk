@@ -7,69 +7,71 @@
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-  <aside id="hubs-panel" class="hubs-panel" aria-label="Hubs you can ask about" hidden>
-    <h2 class="panel-title">Hubs you can ask about</h2>
-    <div id="hubs-groups"></div>
-    <section id="alerts" class="alerts" aria-label="Recent near-term risk alerts">
+  <div class="layout">
+    <aside id="hubs-panel" class="side-panel hubs-panel" aria-label="Hubs you can ask about" hidden>
+      <h2 class="panel-title">Hubs you can ask about</h2>
+      <div id="hubs-groups"></div>
+    </aside>
+
+    <div id="app" class="app">
+      <header class="header">
+        <div class="brand-row">
+          <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2" opacity="0.35"/>
+            <circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="2" opacity="0.6"/>
+            <path d="M16 16 L16 3 A13 13 0 0 1 27.3 9.5 Z" fill="currentColor" opacity="0.35"/>
+            <circle cx="16" cy="16" r="2.5" fill="currentColor"/>
+            <circle cx="22" cy="10" r="1.8" fill="currentColor"/>
+          </svg>
+          <div>
+            <h1 class="brand">SkyRisk</h1>
+            <p class="subtitle">Weather-risk exposure for our distribution hubs</p>
+          </div>
+        </div>
+        <button id="new-chat" class="ghost" type="button">New conversation</button>
+      </header>
+
+      <main id="thread" class="thread" aria-live="polite">
+        <section id="empty" class="welcome">
+          <h2 class="welcome-title">Ask about hub weather exposure</h2>
+          <p class="welcome-context"><span id="hub-count">US hubs</span> · Open-Meteo 2016–2025 + FEMA NRI + 7-day forecast · deterministic scoring</p>
+          <p id="hubs-line" class="hubs-line" dir="auto" hidden></p>
+          <div class="chips">
+            <button class="chip" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2"/></svg>
+              <span>Which hubs in the Midwest are most exposed to winter disruption?</span>
+            </button>
+            <button class="chip" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+              <span>Compare Miami and Houston in terms of hurricane and flood exposure.</span>
+            </button>
+            <button class="chip" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+              <span>What percentage of days in Denver last year had snowfall?</span>
+            </button>
+            <button class="chip" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>
+              <span>Why is the Dallas hub's weather disruption risk high?</span>
+            </button>
+            <button class="chip" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17a5 5 0 1 1 1.5-9.8A6 6 0 0 1 20 10a4 4 0 0 1-1 7.9M13 13l-2 4h3l-2 4"/></svg>
+              <span>What's the near-term risk for Houston this week?</span>
+            </button>
+          </div>
+        </section>
+      </main>
+
+      <form id="composer" class="composer">
+        <textarea id="input" dir="auto" rows="1" placeholder="Ask about a hub's weather exposure…" aria-label="Your question" required></textarea>
+        <button id="send" class="send" type="submit">Send</button>
+      </form>
+    </div>
+
+    <aside id="alerts-panel" class="side-panel alerts-panel" aria-label="Recent near-term risk alerts" hidden>
       <h2 class="panel-title">Recent alerts</h2>
       <ul id="alerts-list" class="alerts-list"></ul>
       <p id="alerts-empty" class="alerts-empty" hidden>No alerts yet. A forecast check runs daily.</p>
-    </section>
-  </aside>
-
-  <div id="app" class="app">
-    <header class="header">
-      <div class="brand-row">
-        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2" opacity="0.35"/>
-          <circle cx="16" cy="16" r="8" fill="none" stroke="currentColor" stroke-width="2" opacity="0.6"/>
-          <path d="M16 16 L16 3 A13 13 0 0 1 27.3 9.5 Z" fill="currentColor" opacity="0.35"/>
-          <circle cx="16" cy="16" r="2.5" fill="currentColor"/>
-          <circle cx="22" cy="10" r="1.8" fill="currentColor"/>
-        </svg>
-        <div>
-          <h1 class="brand">SkyRisk</h1>
-          <p class="subtitle">Weather-risk exposure for our distribution hubs</p>
-        </div>
-      </div>
-      <button id="new-chat" class="ghost" type="button">New conversation</button>
-    </header>
-
-    <main id="thread" class="thread" aria-live="polite">
-      <section id="empty" class="welcome">
-        <h2 class="welcome-title">Ask about hub weather exposure</h2>
-        <p class="welcome-context"><span id="hub-count">US hubs</span> · Open-Meteo 2016–2025 + FEMA NRI + 7-day forecast · deterministic scoring</p>
-        <p id="hubs-line" class="hubs-line" dir="auto" hidden></p>
-        <p id="alerts-line" class="alerts-line" hidden></p>
-        <div class="chips">
-          <button class="chip" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7M9 4l3 2 3-2M9 20l3-2 3 2"/></svg>
-            <span>Which hubs in the Midwest are most exposed to winter disruption?</span>
-          </button>
-          <button class="chip" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-            <span>Compare Miami and Houston in terms of hurricane and flood exposure.</span>
-          </button>
-          <button class="chip" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
-            <span>What percentage of days in Denver last year had snowfall?</span>
-          </button>
-          <button class="chip" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>
-            <span>Why is the Dallas hub's weather disruption risk high?</span>
-          </button>
-          <button class="chip" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17a5 5 0 1 1 1.5-9.8A6 6 0 0 1 20 10a4 4 0 0 1-1 7.9M13 13l-2 4h3l-2 4"/></svg>
-            <span>What's the near-term risk for Houston this week?</span>
-          </button>
-        </div>
-      </section>
-    </main>
-
-    <form id="composer" class="composer">
-      <textarea id="input" dir="auto" rows="1" placeholder="Ask about a hub's weather exposure…" aria-label="Your question" required></textarea>
-      <button id="send" class="send" type="submit">Send</button>
-    </form>
+    </aside>
   </div>
   <script src="/static/app.js"></script>
 </body>
