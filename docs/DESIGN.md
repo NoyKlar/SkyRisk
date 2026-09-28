@@ -56,11 +56,12 @@ flowchart LR
 |---|---|---|
 | `ingest/` (`open_meteo.py`, `fema_nri.py`) | Public APIs, SQLite | httpx with retries. Responses are validated by Pydantic before they are cached. |
 | `scoring/` (`metrics.py`, `engine.py`) | Nothing (pure) | Takes metrics + config and returns a `ScoreResult`. `pipeline.py` loads the inputs and persists the run. |
-| `agent/tools.py` | SQLite (read only), near-term service | Six tools (`list_hubs`, `rank_hubs`, `compare_hubs`, `explain_score`, `weather_stat`, `near_term_risk`), each with a Pydantic input model that becomes a **strict JSON schema** for the LLM. Results are Pydantic models serialized to JSON, with caveats attached. |
+| `agent/tools.py` | SQLite (read only), near-term service, year-to-date service | Six tools (`list_hubs`, `rank_hubs`, `compare_hubs`, `explain_score`, `weather_stat`, `near_term_risk`), each with a Pydantic input model that becomes a **strict JSON schema** for the LLM. Results are Pydantic models serialized to JSON, with caveats attached. |
 | `agent/providers/` | Anthropic / OpenAI SDKs | A provider-neutral `LLMProvider` protocol. Each adapter translates neutral messages and tool definitions to its own API and back. |
 | `agent/core.py` | Guardrails, provider, tools | Runs the tool loop, then validates the final `AgentAnswer` JSON against the schema and checks grounding against this turn's tool results. |
-| `api/` | Agent | FastAPI. `POST /api/chat` checks the rate limits (`ratelimit.py`), then maps a `session_id` to an in-memory `Conversation`. `POST /api/alerts/check` (token-protected) and `GET /api/alerts` serve the near-term alerts. Serves the static chat page. Deployed as one Render web service (§11). |
+| `api/` | Agent | FastAPI. `POST /api/chat` checks the rate limits (`ratelimit.py`), then maps a `session_id` to an in-memory `Conversation`. `POST /api/alerts/check` (token-protected) and `GET /api/alerts` serve the near-term alerts, and `GET /api/near-term` serves each hub's current level for the hubs list. Serves the static chat page. Deployed as one Render web service (§11). |
 | `nearterm/` (`engine.py`, `service.py`, `alerts.py`) | Open-Meteo forecast, SQLite, webhook | Pure forecast scoring; a live forecast with a 1 h cache; the alert check writes snapshots and alerts and posts one webhook message (§12). |
+| `history/ytd.py` | Open-Meteo archive | Current-year year-to-date days for `weather_stat` only, cached 6 h in memory, never stored or scored (§4). |
 | `evals/` | Agent, SQLite | Runs `evals/cases.yaml` against the real agent, checks each reply, and writes reports. |
 
 **The contract between the LLM and the code** is two JSON schemas, both enforced by the providers' structured-output features and re-validated with Pydantic:
@@ -114,7 +115,8 @@ src/skyrisk/
   pipeline.py          ingest orchestration; load inputs -> engine -> persist
   ingest/              http.py (get_json / post_json / post with retries), open_meteo.py (archive + forecast), fema_nri.py
   scoring/             metrics.py (raw data -> metrics), engine.py (normalize, weight, rank)
-  nearterm/            engine.py (forecast -> 0-100), service.py (live forecast + cache), alerts.py (check, webhook, demo)
+  nearterm/            engine.py (forecast -> 0-100), service.py (live forecast + cache, hub levels), alerts.py (check, webhook, demo)
+  history/             ytd.py (current-year year-to-date archive data for weather_stat, 6 h cache, not scored)
   agent/
     core.py            Agent loop, AgentReply, Conversation
     tools.py           the six tools + strict JSON schema generation
@@ -165,7 +167,7 @@ One file (`data/skyrisk.db`) holds everything:
 All logic is in `src/skyrisk/scoring/` and all parameters are in `config/scoring.yaml` (version **1.2**). Bump the version whenever a weight or threshold changes.
 
 **Inputs**
-- **Open-Meteo daily history, 2016-01-01 to 2025-12-31: full calendar years only.** The end date is fixed so results are reproducible. 2026 is intentionally excluded because it is not a complete year: a partial year would undercount every "days per year" metric, and the scores would drift every day. For "this week", the near-term forecast layer (§12) is used instead. From it we count days per year that exceed a threshold:
+- **Open-Meteo daily history, 2016-01-01 to 2025-12-31: full calendar years only.** The end date is fixed so results are reproducible. 2026 is kept out of the score because it is not a complete year: a partial year would undercount every "days per year" metric, and the scores would drift every day. 2026 is available only as year-to-date weather statistics (see "2026 year-to-date" below), and for "this week" the near-term forecast layer (§12) is used. From the window we count days per year that exceed a threshold:
 
 | Metric | Daily threshold |
 |---|---|
@@ -197,6 +199,18 @@ All logic is in `src/skyrisk/scoring/` and all parameters are in `config/scoring
 | Heat | 0.15 | extreme heat days 0.50, NRI heat wave 0.50 |
 
 **What a score means:** a **relative ranking** among these 13 hubs, not a probability of disruption and not an absolute risk level. Adding or removing a hub changes everyone's score. A missing NRI value (e.g. coastal flood inland) scores 0 and carries a note.
+
+**2026 year-to-date (weather_stat only, not scored).** `weather_stat` with `year: 2026` answers from `YtdService` (`src/skyrisk/history/ytd.py`) instead of SQLite:
+- It fetches Jan 1 to the latest complete day from the Open-Meteo archive. The archive serves up to today, but today is still in progress at the hub, so the request ends two days before the UTC date: a complete local day at every US hub. Trailing all-null days are trimmed.
+- Results are cached in memory per hub for 6 h. Nothing is written to SQLite, so ingest, the `weather` table and score runs are untouched.
+- The result has `partial_year: true`, `period_start`/`period_end`, and a caveat that it is a partial year, not comparable to full years and not part of the risk score. `days_per_year` returns the actual count to date, since annualizing a partial year would mislead. `pct_days` is unchanged.
+- Only the year right after the window is served, and only while it is the current year (injected clock). That makes the refresh policy below explicit in code: once 2027 starts, 2026 is refused until the window rolls.
+- These numbers are counts and percentages, not risk scores, so they never enter `scores_cited` and grounding (§7) is unaffected. There is no 2026 risk score or rank.
+
+**Refresh policy.** The window is fixed so every run is reproducible. In production, the historical score would be recomputed each January on a **rolling 10 full years** (in January 2027: 2017–2026):
+- **Versioned:** each run already stores the scoring config version and hash plus a data hash (`score_runs`), so a new window is a new, traceable run, never a silent drift.
+- **Gated by evals:** the new run ships only after the full eval suite passes on both paths. Expected values tied to the old window (e.g. "last year" = 2025, the Denver snow percentage) are updated in the same change.
+- Until then, the year-to-date year stays the one after the window, as above.
 
 **Current ranking (run on the committed config):** Houston 52.7, Miami 44.0, Dallas 36.4, Minneapolis 35.2, Chicago 33.0, Newark 32.5, Memphis 29.7, Kansas City 28.3, Phoenix 24.0, Columbus 19.8, Denver 19.5, Louisville 17.4, Atlanta 15.7.
 
@@ -265,7 +279,7 @@ Hubs (id: city, state (region)):
 - Near-term scores (hazard "near_term", from near_term_risk) are a different, absolute 0-100 forecast severity with a low/medium/high level. Keep the two apart: never add, average or rank a near-term score together with a historical one, and say which kind you are quoting.
 
 ## Time
-Historical weather data covers the full calendar years 2016-2025 only. 2026 is intentionally excluded because it is not a complete year. Interpret "last year" as 2025, the latest full year in the data. For any historical question about 2026 or "this year", say that no historical data exists for it and do not guess or estimate. Always state this interpretation in assumptions_and_limitations when you use it. If a requested year is outside 2016-2025, explain that no data exists for it; do not guess. For what is expected in the next 7 days, use near_term_risk (a forecast, not history).
+Historical risk scores and ranks use the full calendar years 2016-2025 only. Interpret "last year" as 2025, the latest full year in the data. For 2026 or "this year", weather_stat returns year-to-date statistics (partial_year true): always call them partial, give the exact date range the tool returns, and never compare them to full-year figures as if they were complete. 2026 has no risk score and no rank: never compute, estimate or imply one. Year-to-date counts and percentages are not risk scores, so never put them in scores_cited. If weather_stat reports that year-to-date data is unavailable, say so and do not guess. Always state these interpretations in assumptions_and_limitations when you use them. For any other year outside 2016-2025, explain that no data exists for it; do not guess. For what is expected in the next 7 days, use near_term_risk (a forecast, not history).
 
 ## Assumptions and limitations
 Every answer lists the assumptions and limits that matter for it in assumptions_and_limitations, using the caveats returned by the tools: for example, that FEMA NRI values describe the whole county rather than the hub site, the thresholds that define a weather day, and the period covered.
@@ -322,7 +336,7 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 
 | Category | What it tests |
 |---|---|
-| `core_examples` | The headline questions ("Midwest winter", "Denver last-year snow %"), with exact expected tools, arguments, numbers and hub order, plus out-of-window years (2014, 2026, "this year") |
+| `core_examples` | The headline questions ("Midwest winter", "Denver last-year snow %"), with exact expected tools, arguments, numbers and hub order, plus out-of-window years (2014), 2026 year-to-date ("2026", "this year") and a 2026 risk score |
 | `normal` | Ranking, comparison, explanation, weather stats, methodology, and an unknown hub (must ask for clarification) |
 | `follow_up` | Two-turn conversations: a follow-up that names no hub ("And for heat?", "How many snow days did it have last year?"), including one in Hebrew |
 | `near_term` | This week's risk and alerts for a hub, the week's ranking, and a question that mixes near-term and historical scores (they must stay apart). The forecast is live, so these check the tool call and wording, not values. |
@@ -560,6 +574,14 @@ Costs are estimates from recorded token usage × `src/skyrisk/evals/pricing.py`.
 | `history-2026` | How many snow days did Denver have in 2026? | answered or needs_clarification; mention "2025"; grounding catches any invented number |
 | `history-this-year` | What percentage of days this year in Houston had heavy rain? | answered or needs_clarification; mention "2016" |
 
+These were the 2026 expectations when 2026 was fully excluded. With 2026 year-to-date stats (§4) they changed, and one case was added:
+
+| Case | Question | Must |
+|---|---|---|
+| `history-2026` | How many snow days did Denver have in 2026? | answered; `weather_stat(hub_ids=[denver], stat=snow_day, year=2026)`; mention "2026-01-01" and "partial" |
+| `history-this-year` | What percentage of days this year in Houston had heavy rain? | answered; `weather_stat(hub_ids=[houston], stat=heavy_rain, year=2026)`; mention "2026-01-01" |
+| `history-2026-score` | What is Denver's 2026 risk score? | answered or needs_clarification; mention "2025"; grounding catches any invented score |
+
 The forecast is live, so the near-term cases check tools and wording, not values. Any `near_term` score an answer cites is still re-checked against the forecast service (the same 1 h cache the tool just used).
 
 **Results** (2026-09-28, `--repeat 3`, 42 cases × 3 = 126 runs per path):
@@ -619,7 +641,8 @@ Reports: [`latest.md`](../evals/results/latest.md), [`anthropic-outage-latest.md
 
 **Assumptions**
 - Historical exposure (2016–2025) is a reasonable proxy for long-run exposure. Climate trends are not modeled.
-- **The historical window is the full calendar years 2016–2025. 2026 is intentionally excluded:** it is not a complete year, so it would undercount per-year metrics and make every score drift daily. For a historical question about 2026 or "this year", the agent says no historical data exists and does not guess. For what is coming next, it uses the 7-day forecast (§12).
+- **The historical window, and every risk score, is the full calendar years 2016–2025.** 2026 is not a complete year, so scoring it would undercount per-year metrics and make every score drift daily. 2026 is available only as year-to-date weather statistics, labelled partial with the exact period (§4); it has no risk score. For what is coming next, the agent uses the 7-day forecast (§12). The window rolls forward each January under the refresh policy (§4).
+- Year-to-date data for the most recent days comes from Open-Meteo's archive before final reanalysis and may still be revised.
 - The Open-Meteo 7-day forecast is a model forecast. Near-term scores can change from one day to the next, and later days are weighted down.
 - Hub locations are city centers, and FEMA NRI values describe the **whole county** containing that point, not the hub site. The agent says so whenever NRI data drives an answer.
 - "Last year" means **2025**, the latest full year in the data, not the calendar year before today. The agent states this interpretation.
@@ -751,7 +774,7 @@ flowchart LR
     AG -->|last check + recent alerts| DB
 ```
 
-1. **Trigger:** `.github/workflows/near-term-check.yml` runs daily and can be started by hand (optionally with `demo_hub`). Its curl retries (4 × 30 s) ride out the free tier's cold start.
+1. **Trigger:** `.github/workflows/near-term-check.yml` runs daily and can be started by hand (optionally with `demo_hub`). Its curl retries (4 × 30 s) ride out the free tier's cold start: `--retry` covers timeouts, 408, 429, 500, 502, 503 and 504, and `--retry-connrefused` covers refused connections. Any other 4xx (a 400 for an unknown `demo_hub`, a 401 for a wrong token) fails at once, and `--fail-with-body` puts the server's reason in the log. The step runs with `shell: bash` for `pipefail`, so the pipe into `tee` can't hide a curl failure.
 2. **Auth:** `Authorization: Bearer <ALERT_TOKEN>`, compared in constant time. With no `ALERT_TOKEN` configured the endpoint answers `503`: it is disabled, never open. The site is public, and a check triggers 13 forecast fetches and a webhook post.
 3. **Check:** every hub gets a fresh forecast (bypassing the cache) and is compared with its last snapshot. An alert fires when `|Δ| ≥ 20` (`alerts.change_threshold`) or the level changes, **in either direction**, because an easing from high to medium is useful news too.
    - A hub with **no snapshot** only gets a baseline.
@@ -760,7 +783,7 @@ flowchart LR
 4. **Notify:** all of a check's alerts go out as **one** `{"text": ...}` message, e.g. `:warning: SkyRisk near-term risk alert (1 hub)` / `• Houston: 28 → 70 (low → high), heavy rain peak 82 mm on 2026-09-30`.
    - Unset webhook → `skipped`.
    - A failing webhook is retried twice, then recorded as `failed`. It never fails the check.
-5. **Read:** `GET /api/alerts` (public) feeds the chat page's "Recent alerts" panel. The agent's `near_term_risk` tool includes each hub's last check and its alerts from the last 7 days.
+5. **Read:** `GET /api/alerts` (public) feeds the chat page's "Recent alerts" panel (the right-hand column from 1100px, below the chat on narrower screens). The agent's `near_term_risk` tool includes each hub's last check and its alerts from the last 7 days.
 
 **Demo mode.** `{"demo_hub": "chicago"}`, `skyrisk alerts check --demo chicago`, or the workflow's `demo_hub` input.
 - The configured storm (30 cm snow and 95 km/h gusts on day 1) is merged into the hub's **real** forecast, taking the max of real and demo values, and scored by the same engine.
@@ -776,6 +799,12 @@ flowchart LR
 - Chat traffic cannot move the alert baseline.
 - The tradeoff: a chat answer can differ slightly from the morning check. The tool returns both the current score and the last check, labeled.
 - The prompt keeps the two scales apart: historical scores are "relative", `near_term` scores are absolute. They must never be added, averaged or ranked together.
+
+**Hub badges.** `GET /api/near-term` (public) returns every hub's current score, level and forecast period for the low/medium/high pills in the hubs list ("–" when a hub's forecast is unavailable).
+- It reads the same **1 h cache** as the chat tool and never forces a fresh fetch, so page loads trigger at most about one forecast call per hub per hour. That is why it needs no token or rate limit.
+- `NearTermService.levels()` fetches up to 4 hubs at a time, so a cold cache doesn't stack 13 sequential 10 s timeouts. A failing hub is reported with `level: null` and an error, and never fails the list.
+- `503` when the near-term layer is not configured, as for the check endpoint.
+- It shows the current forecast, which can differ from the last alert check. The alerts panel shows the check history.
 
 **Known tradeoff: ephemeral storage.** Render's free tier has no persistent disk. The SQLite file is rebuilt at every deploy, and runtime writes are lost on a restart or spin-down. After a restart:
 - the first check only sets a **new baseline**, so a change that happened across the restart is not alerted

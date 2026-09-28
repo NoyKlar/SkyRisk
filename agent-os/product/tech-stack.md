@@ -25,6 +25,7 @@
 ## Data Sources
 
 - Open-Meteo historical weather API (full years 2016–2025)
+- Open-Meteo archive, current-year year-to-date for `weather_stat` only (partial year, cached in memory, not scored)
 - Open-Meteo forecast API (7-day daily forecast, near-term risk)
 - FEMA National Risk Index
 

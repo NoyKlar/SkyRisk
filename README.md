@@ -47,7 +47,7 @@ uv run skyrisk score         # compute, store and print a ranked score run
 uv run skyrisk show chicago  # explain one hub's latest scores, metric by metric
 ```
 
-The historical window is fixed at full calendar years **2016–2025**. 2026 is intentionally excluded because it is not a complete year, and the agent says so instead of guessing (the near-term forecast covers "this week"). `ingest` caches everything in SQLite, so re-running it is instant. `--refresh` re-fetches the data, and `--hub ID` limits the run to one hub. \
+The historical window, and so every risk score, is fixed at full calendar years **2016–2025**. A partial year would undercount every "days per year" metric and make the scores drift daily. 2026 is available **only as year-to-date weather statistics** ("How many snow days did Denver have in 2026?"): `weather_stat` fetches Jan 1 to the latest complete day from the Open-Meteo archive (cached 6 h, never stored or scored), and the agent labels the answer as a partial year with the exact date range. "What is Denver's 2026 risk score?" is answered with the 2016–2025 rule instead. The near-term forecast covers "this week". How the window would roll forward in production is in `docs/DESIGN.md` §4, refresh policy. `ingest` caches everything in SQLite, so re-running it is instant. `--refresh` re-fetches the data, and `--hub ID` limits the run to one hub. \
 Hubs, weights and thresholds live in `config/hubs.yaml` and `config/scoring.yaml`.
 
 ## 5. Chat in the terminal
@@ -109,7 +109,7 @@ uv run skyrisk alerts list                  # recent alerts
   ```
 - Or run the GitHub workflow manually with a `demo_hub` input. The alert then appears in the page's "Recent alerts" panel.
 
-**Daily schedule (GitHub Actions).** Render's free tier sleeps, so there is no in-process scheduler. [`.github/workflows/near-term-check.yml`](.github/workflows/near-term-check.yml) calls the endpoint at 11:00 UTC every day, and its retries ride out the cold start. Setup:
+**Daily schedule (GitHub Actions).** Render's free tier sleeps, so there is no in-process scheduler. [`.github/workflows/near-term-check.yml`](.github/workflows/near-term-check.yml) calls the endpoint at 11:00 UTC every day. Its retries ride out the cold start (5xx, timeouts, refused connections), while a 400 or 401 fails at once with the server's reason in the log. Setup:
 1. Generate a token: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
 2. Set it as `ALERT_TOKEN` in the Render dashboard (and optionally `ALERT_WEBHOOK_URL`).
 3. In GitHub → Settings → Secrets and variables → Actions:
@@ -124,6 +124,8 @@ GitHub pauses scheduled workflows after 60 days without repository activity; re-
 - the alert list starts empty
 
 Production would keep snapshots and alerts in Postgres (`docs/DESIGN.md` §8, §12).
+
+**In the page.** The chat page has three columns on screens 1100px and wider: the hubs on the left, each with a low/medium/high near-term pill ("–" when its forecast is unavailable), the chat in the middle, and recent alerts on the right. On narrower screens the alerts panel follows the chat. The pills come from the public `GET /api/near-term`, which returns every hub's current score and level from the same 1-hour forecast cache (so it triggers at most about one forecast call per hub per hour).
 
 **In chat.** The agent's `near_term_risk` tool answers "What's the near-term risk for Houston?" and "Any alerts for Houston?". It fetches the live forecast, cached for 1 hour. It never writes snapshots, so chat traffic can't move the alert baseline.
 
