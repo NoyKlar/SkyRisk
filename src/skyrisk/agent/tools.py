@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from skyrisk import db
 from skyrisk.config import HubRegistry, Region, ScoringConfig
+from skyrisk.history.ytd import YtdService, YtdUnavailable
 from skyrisk.models import NRI_HAZARDS
 from skyrisk.nearterm import alerts as nt_alerts
 from skyrisk.nearterm.alerts import UNITS
@@ -44,6 +45,7 @@ class ToolContext:
     registry: HubRegistry
     scoring: ScoringConfig
     near_term: NearTermService | None = None  # None: the near_term_risk tool reports it is not configured
+    ytd: YtdService | None = None  # None: weather_stat serves only the scored window
 
 
 def relative_caveat(ctx: ToolContext) -> str:
@@ -379,7 +381,8 @@ class WeatherStatInput(BaseModel):
     stat: Stat
     unit: Unit = Field(description="pct_days = % of days; days_per_year = average days per year")
     months: list[int] | None = Field(default=None, description="Restrict to these months (1-12); null = all")
-    year: int | None = Field(default=None, description="Restrict to one calendar year; null = whole window")
+    year: int | None = Field(default=None, description="Restrict to one calendar year (the year after the window "
+                             "gives year-to-date data); null = whole window")
 
     @field_validator("months")
     @classmethod
@@ -403,6 +406,7 @@ class WeatherStatResult(ToolResult):
     period_start: date
     period_end: date
     months: list[int] | None
+    partial_year: bool = Field(default=False, description="True for year-to-date data: not a complete year")
     rows: list[StatRow]
 
 
@@ -421,13 +425,19 @@ def _stat_definition(stat: Stat, s: ScoringConfig) -> tuple[str, Callable[[float
 def weather_stat(ctx: ToolContext, args: WeatherStatInput) -> WeatherStatResult:
     _check_hubs(ctx, args.hub_ids)
     window = ctx.scoring.window
+    ytd_year = ctx.ytd.year() if ctx.ytd is not None else None
+    if args.year is not None and args.year == ytd_year:
+        return _weather_stat_ytd(ctx, args)
     start, end = window.start, window.end
     if args.year is not None:
         if not window.start.year <= args.year <= window.end.year:
             message = (f"Year {args.year} is outside the historical data window "
                        f"({window.start.year}-{window.end.year}, full calendar years only); "
                        "no historical data is available for it.")
-            if args.year > window.end.year:
+            if ytd_year is not None:
+                message += (f" {ytd_year} is available as partial year-to-date data (call weather_stat with "
+                            f"year {ytd_year}). For the next 7 days, near_term_risk has the forecast.")
+            elif args.year > window.end.year:
                 message += (f" {window.end.year + 1} onward is intentionally excluded because it is not a "
                             "complete year. For the next 7 days, near_term_risk has the forecast.")
             raise ToolError(message)
@@ -459,6 +469,49 @@ def weather_stat(ctx: ToolContext, args: WeatherStatInput) -> WeatherStatResult:
     return WeatherStatResult(
         stat=args.stat, unit=args.unit, definition=definition, period_start=start, period_end=end,
         months=args.months, rows=rows, caveats=caveats,
+    )
+
+
+def _weather_stat_ytd(ctx: ToolContext, args: WeatherStatInput) -> WeatherStatResult:
+    """Partial current-year stats from the archive. Not part of any risk score; days_per_year is the
+    actual count to date, because annualizing a partial year would mislead."""
+    window = ctx.scoring.window
+    field, predicate, definition = _stat_definition(args.stat, ctx.scoring)
+    rows, through = [], []
+    for hub_id in args.hub_ids:
+        try:
+            data = ctx.ytd.data(hub_id)
+        except YtdUnavailable as e:
+            raise ToolError(str(e)) from e
+        days = data.days
+        if args.months:
+            days = [d for d in days if d.date.month in args.months]
+        valid = [v for d in days if (v := getattr(d, field)) is not None]
+        if not valid:
+            raise ToolError(f"No {field} data yet for {hub_id} in the requested months of {data.year} "
+                            f"(data through {data.data_through.isoformat()}).")
+        matching = sum(1 for v in valid if predicate(v))
+        value = metrics.pct_days(days, field, predicate) if args.unit == "pct_days" else matching
+        rows.append(StatRow(hub_id=hub_id, value=_round(value), matching_days=matching, days_with_data=len(valid)))
+        through.append(data.data_through)
+
+    year, start, end = data.year, data.start, min(through)
+    caveats = [
+        f"{year} is a partial year: {start.isoformat()} to {end.isoformat()}, the latest complete day available "
+        "in the Open-Meteo archive (the most recent days may still be revised). Not comparable to full-year "
+        f"figures and not part of the risk score, which uses the full years {window.start.year}-{window.end.year}.",
+        f"Definition: a qualifying day has {definition} (Open-Meteo daily data at the hub's coordinates).",
+    ]
+    if args.months:
+        caveats.append(f"Restricted to months {args.months}.")
+    if len(set(through)) > 1:
+        caveats.append("Hubs have data through different dates: "
+                       + ", ".join(f"{r.hub_id} {d.isoformat()}" for r, d in zip(rows, through)) + ".")
+    if args.unit == "days_per_year":
+        caveats.append(f"Value is the actual count of matching days so far in {year}, not annualized.")
+    return WeatherStatResult(
+        stat=args.stat, unit=args.unit, definition=definition, period_start=start, period_end=end,
+        months=args.months, partial_year=True, rows=rows, caveats=caveats,
     )
 
 
@@ -608,7 +661,9 @@ TOOLS: tuple[ToolSpec, ...] = (
     ToolSpec(
         "weather_stat",
         "Historical weather statistics per hub from daily data, e.g. percent of days with snowfall "
-        "or average extreme-heat days per year. Optionally restrict to one calendar year or to months.",
+        "or average extreme-heat days per year. Optionally restrict to one calendar year or to months. "
+        "The current year (the one after the scored window) returns partial year-to-date statistics "
+        "with partial_year true and the exact period; these are not risk scores.",
         WeatherStatInput, weather_stat,
     ),
     ToolSpec(

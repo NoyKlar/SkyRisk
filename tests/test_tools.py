@@ -60,7 +60,7 @@ def test_weather_stat_rejects_year_outside_window(tool_ctx):
     assert "intentionally excluded" not in str(exc.value)
 
 
-def test_weather_stat_2026_says_it_is_intentionally_excluded(tool_ctx):
+def test_weather_stat_2026_without_ytd_says_it_is_intentionally_excluded(tool_ctx):
     with pytest.raises(ToolError) as exc:
         weather_stat(tool_ctx, WeatherStatInput(hub_ids=["denver"], stat="snow_day", unit="pct_days", year=2026))
     message = str(exc.value)

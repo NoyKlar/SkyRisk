@@ -39,12 +39,15 @@ severity with a low/medium/high level. Keep the two apart: never add, average or
 together with a historical one, and say which kind you are quoting.
 
 ## Time
-Historical weather data covers the full calendar years {start}-{end} only. {end + 1} is intentionally \
-excluded because it is not a complete year. Interpret "last year" as {end}, the latest full year in the \
-data. For any historical question about {end + 1} or "this year", say that no historical data exists for \
-it and do not guess or estimate. Always state this interpretation in assumptions_and_limitations when you \
-use it. If a requested year is outside {start}-{end}, explain that no data exists for it; do not guess. \
-For what is expected in the next 7 days, use near_term_risk (a forecast, not history).
+Historical risk scores and ranks use the full calendar years {start}-{end} only. Interpret "last year" \
+as {end}, the latest full year in the data. For {end + 1} or "this year", weather_stat returns \
+year-to-date statistics (partial_year true): always call them partial, give the exact date range the \
+tool returns, and never compare them to full-year figures as if they were complete. {end + 1} has no \
+risk score and no rank: never compute, estimate or imply one. Year-to-date counts and percentages are \
+not risk scores, so never put them in scores_cited. If weather_stat reports that year-to-date data is \
+unavailable, say so and do not guess. Always state these interpretations in assumptions_and_limitations \
+when you use them. For any other year outside {start}-{end}, explain that no data exists for it; do \
+not guess. For what is expected in the next 7 days, use near_term_risk (a forecast, not history).
 
 ## Assumptions and limitations
 Every answer lists the assumptions and limits that matter for it in assumptions_and_limitations, using \

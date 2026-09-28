@@ -26,6 +26,7 @@ from skyrisk.agent.tools import ExplainScoreInput, ToolContext, ToolError, expla
 from skyrisk.config import (
     CLASSIFIER_NAMES,
     HubRegistry,
+    ScoringConfig,
     load_agent_config,
     load_hubs,
     load_near_term_config,
@@ -36,7 +37,8 @@ from skyrisk.evals.cases import load_cases
 from skyrisk.evals.report import write_reports
 from skyrisk.evals.runner import EvalMeta, run_evals
 from skyrisk.ingest import http
-from skyrisk.ingest.open_meteo import fetch_forecast
+from skyrisk.history.ytd import YtdService
+from skyrisk.ingest.open_meteo import fetch_daily, fetch_forecast
 from skyrisk.nearterm import alerts as nt_alerts
 from skyrisk.nearterm.alerts import Notify
 from skyrisk.nearterm.service import NearTermService, NearTermUnavailable
@@ -44,6 +46,7 @@ from skyrisk.nearterm.service import NearTermService, NearTermUnavailable
 HTTP_TIMEOUT_S = 60.0
 FORECAST_TIMEOUT_S = 10.0  # forecasts are fetched while a user waits (chat) or a cron job waits (alerts)
 NEAR_TERM_COMMANDS = ("chat", "serve", "eval", "alerts")
+YTD_COMMANDS = ("chat", "serve", "eval")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -173,6 +176,11 @@ def _near_term_service(config_dir: Path, registry: HubRegistry, client: httpx.Cl
     return NearTermService(registry, cfg, lambda hub: fetch_forecast(hub, client, days=cfg.forecast_days))
 
 
+def _ytd_service(registry: HubRegistry, config: ScoringConfig, client: httpx.Client) -> YtdService:
+    """Current-year year-to-date data for weather_stat; one retry, since a user is waiting."""
+    return YtdService(registry, config.window, lambda hub, start, end: fetch_daily(hub, start, end, client, retries=1))
+
+
 def _webhook(client: httpx.Client) -> Notify | None:
     """Posts a Slack-compatible `{"text": ...}` body to ALERT_WEBHOOK_URL; None when it is unset."""
     url = os.environ.get("ALERT_WEBHOOK_URL")
@@ -181,20 +189,21 @@ def _webhook(client: httpx.Client) -> Notify | None:
     return lambda text: http.post(client, url, {"text": text})
 
 
-def _build_agent(conn, config_dir: Path, simulate_outage: str | None = None, near_term=None):
+def _build_agent(conn, config_dir: Path, simulate_outage: str | None = None, near_term=None, ytd=None):
     load_dotenv()
     if simulate_outage:
         _log(f"SIMULATED OUTAGE: every {simulate_outage} model fails on every call")
     try:
         return build_agent(conn, config_dir, os.environ, log=_log, simulate_outage=simulate_outage,
-                           near_term=near_term)
+                           near_term=near_term, ytd=ytd)
     except AgentSetupError as e:
         print(f"{e} Set it in .env (see .env.example).", file=sys.stderr)
         return None
 
 
-def _chat(conn, config_dir: Path, question: str | None, simulate_outage: str | None = None, near_term=None) -> int:
-    built = _build_agent(conn, config_dir, simulate_outage, near_term)
+def _chat(conn, config_dir: Path, question: str | None, simulate_outage: str | None = None, near_term=None,
+          ytd=None) -> int:
+    built = _build_agent(conn, config_dir, simulate_outage, near_term, ytd)
     if built is None:
         return 1
     agent, config = built
@@ -228,7 +237,7 @@ def _serve(ctx: ToolContext, config_dir: Path, host: str, port: int, client: htt
     from skyrisk.api.ratelimit import RateLimiter
     from skyrisk.api.sessions import SessionStore
 
-    built = _build_agent(ctx.conn, config_dir, near_term=ctx.near_term)
+    built = _build_agent(ctx.conn, config_dir, near_term=ctx.near_term, ytd=ctx.ytd)
     if built is None:
         return 1
     agent, config = built
@@ -259,7 +268,7 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
     if run_id is None:
         print("No score run exists yet; run `skyrisk ingest` and `skyrisk score` first.", file=sys.stderr)
         return 2
-    built = _build_agent(ctx.conn, config_dir, args.simulate_outage, ctx.near_term)
+    built = _build_agent(ctx.conn, config_dir, args.simulate_outage, ctx.near_term, ctx.ytd)
     if built is None:
         return 2
     agent, config = built
@@ -381,7 +390,8 @@ def main(argv: list[str] | None = None) -> int:
     forecast_client = httpx.Client(timeout=FORECAST_TIMEOUT_S)
     near_term = (_near_term_service(args.config_dir, registry, forecast_client)
                  if args.command in NEAR_TERM_COMMANDS else None)
-    ctx = ToolContext(conn, registry, config, near_term)
+    ytd = _ytd_service(registry, config, forecast_client) if args.command in YTD_COMMANDS else None
+    ctx = ToolContext(conn, registry, config, near_term, ytd)
     try:
         if args.command == "ingest":
             with httpx.Client(timeout=HTTP_TIMEOUT_S) as client:
@@ -395,7 +405,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "show":
             return _show(ctx, args.hub_id)
         elif args.command == "chat":
-            return _chat(conn, args.config_dir, args.question, args.simulate_outage, near_term)
+            return _chat(conn, args.config_dir, args.question, args.simulate_outage, near_term, ytd)
         elif args.command == "serve":
             return _serve(ctx, args.config_dir, args.host, args.port, forecast_client)
         elif args.command == "eval":

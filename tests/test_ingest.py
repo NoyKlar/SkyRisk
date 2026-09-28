@@ -21,6 +21,17 @@ def test_parse_open_meteo_fixture(fixtures):
     assert days[4].snowfall_cm == pytest.approx(0.21)
 
 
+def test_parse_archive_ytd_fixture_and_trim(fixtures):
+    days = open_meteo.parse_archive(_load(fixtures, "open_meteo_archive_denver_ytd.json"))
+    assert (days[0].date, days[-1].date, len(days)) == (date(2026, 9, 17), date(2026, 9, 26), 10)
+    assert open_meteo.trim_trailing_missing(days) == days
+    empty = days[-1].model_copy(update={f: None for f in ("snowfall_cm", "temp_max_c", "temp_min_c",
+                                                          "precip_mm", "wind_gust_max_kmh")})
+    partly = days[-2].model_copy(update={"snowfall_cm": None})
+    assert open_meteo.trim_trailing_missing([*days[:-2], partly, empty]) == [*days[:-2], partly]
+    assert open_meteo.trim_trailing_missing([empty]) == []
+
+
 def test_open_meteo_rejects_unexpected_units(fixtures):
     payload = _load(fixtures, "open_meteo_minneapolis.json")
     payload["daily_units"]["snowfall_sum"] = "inch"

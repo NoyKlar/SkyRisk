@@ -78,7 +78,17 @@ def parse_forecast(payload: dict) -> list[WeatherDay]:
     return parse_archive(payload)
 
 
-def fetch_daily(hub: Hub, start: date, end: date, client: httpx.Client) -> list[WeatherDay]:
+def trim_trailing_missing(days: list[WeatherDay]) -> list[WeatherDay]:
+    """Drop trailing days on which every variable is null (not yet available at the end of a range)."""
+    end = len(days)
+    while end and all(getattr(days[end - 1], f) is None for f in WeatherDay.model_fields if f != "date"):
+        end -= 1
+    return days[:end]
+
+
+def fetch_daily(hub: Hub, start: date, end: date, client: httpx.Client, *, retries: int | None = None) -> list[WeatherDay]:
+    """Daily history for [start, end]. `retries=None` keeps get_json's default (batch ingest); interactive
+    callers pass a small number."""
     params = {
         "latitude": hub.lat,
         "longitude": hub.lon,
@@ -87,7 +97,8 @@ def fetch_daily(hub: Hub, start: date, end: date, client: httpx.Client) -> list[
         "daily": ",".join(DAILY_VARS),
         "timezone": "auto",
     }
-    return parse_archive(get_json(client, ARCHIVE_URL, params))
+    kwargs = {} if retries is None else {"retries": retries}
+    return parse_archive(get_json(client, ARCHIVE_URL, params, **kwargs))
 
 
 def fetch_forecast(hub: Hub, client: httpx.Client, *, days: int = 7, retries: int = 1) -> list[WeatherDay]:

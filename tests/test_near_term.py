@@ -281,6 +281,8 @@ def test_system_prompt_states_the_history_window_and_2026_rule(tool_ctx):
     from skyrisk.agent.prompts import build_system_prompt
 
     prompt = build_system_prompt(tool_ctx.registry, tool_ctx.scoring)
-    assert "full calendar years 2016-2025 only" in prompt
-    assert "2026 is intentionally excluded" in prompt and "do not guess" in prompt
+    assert "full calendar years 2016-2025 only" in prompt and '"last year" as 2025' in prompt
+    assert "For 2026 or \"this year\", weather_stat returns year-to-date statistics" in prompt
+    assert "2026 has no risk score and no rank" in prompt and "never put them in scores_cited" in prompt
+    assert "do not guess" in prompt
     assert "near_term_risk" in prompt and "never add, average or rank a near-term score" in prompt
