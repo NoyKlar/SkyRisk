@@ -35,8 +35,8 @@ render.yaml, .github/workflows/  deployment and the daily alert check
 - limitations and style
 
 **[Evaluation set and results](#7-evaluation-set-and-results).** 43 real-model cases: normal, follow-up, near-term, injection, off-topic, look-alike and Hebrew.
-- Full gate, run on the previous version (42 cases): 42/42 on both the normal and outage paths (126/126 runs each), with 0 false positives, 0 misses and 0 grounding failures.
-- After the 2026 change: `history-*` 3/3 (9/9 runs).
+- Full gate on the current version, normal path: 43/43 cases (129/129 runs), with 0 false positives, 0 misses and 0 grounding failures; p50 / p95 10.9 / 23.9 s; $1.45.
+- Outage path: last run on the previous version (42 cases), 42/42 (126/126 runs).
 
 **[Key tradeoffs](#8-key-tradeoffs).**
 - **Only deterministic tools produce numbers.** This makes answers reproducible and defensible; the agent cannot answer beyond what the tools cover.
@@ -378,7 +378,7 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 
 ## 7. Evaluation set and results
 
-**The set:** [`evals/cases.yaml`](../evals/cases.yaml), with 43 cases in eight categories. The full-set runs reported below used the first 33. The 3 `follow_up` cases, then the 4 `near_term` cases and 2 more `core_examples` about 2026, were added later, and `history-2026-score` last ("Multi-turn follow-ups" and "Near-term and 2026 cases" below). **The full gate was last run on the previous version (42 cases, before 2026 year-to-date): 42/42 on both the normal and outage paths.** After the 2026 year-to-date change only the `history-*` cases were re-run (below).
+**The set:** [`evals/cases.yaml`](../evals/cases.yaml), with 43 cases in eight categories. The full-set runs reported below used the first 33. The 3 `follow_up` cases, then the 4 `near_term` cases and 2 more `core_examples` about 2026, were added later, and `history-2026-score` last ("Multi-turn follow-ups" and "Near-term and 2026 cases" below). **Current version, normal path (2026-09-28, `--repeat 3`, local run): 43/43 cases, 129/129 runs**, every category 100%. There were 0 false positives (0/84), 0 misses (0/42), 0 error replies, 0 grounding failures and no flaky cases. Latency p50 / p95 / max: 10.9 / 23.9 / 33.4 s. Model calls: 229 Sonnet and 123 Haiku, $1.45. The outage path was last run on the previous version (42 cases): 42/42.
 
 | Category | What it tests |
 |---|---|
@@ -628,7 +628,7 @@ These were the 2026 expectations when 2026 was fully excluded. With 2026 year-to
 | `history-this-year` | What percentage of days this year in Houston had heavy rain? | answered; `weather_stat(hub_ids=[houston], stat=heavy_rain, year=2026)`; mention "2026-01-01" |
 | `history-2026-score` | What is Denver's 2026 risk score? | answered or needs_clarification; mention "2025"; grounding catches any invented score |
 
-**2026 year-to-date results** (2026-09-28, `uv run skyrisk eval --case 'history-*' --repeat 3 --report-name history-ytd`; report: [`history-ytd-latest.md`](../evals/results/history-ytd-latest.md)): **3/3 cases, 9/9 runs**, 0 false positives, 0 grounding failures, p50 10.3 s, 18 Sonnet + 9 Haiku calls, $0.083. Only these cases were re-run; the full gate (42/42 on both paths, below) predates this change.
+**2026 year-to-date results** (2026-09-28, `uv run skyrisk eval --case 'history-*' --repeat 3 --report-name history-ytd`; report: [`history-ytd-latest.md`](../evals/results/history-ytd-latest.md)): **3/3 cases, 9/9 runs**, 0 false positives, 0 grounding failures, p50 10.3 s, 18 Sonnet + 9 Haiku calls, $0.083. The full gate on the normal path was then re-run on this version: 43/43 (see "The set" above).
 - `history-2026` and `history-this-year` called `weather_stat` with `year: 2026` in every run. Every answer said "so far in 2026" or "year-to-date", gave the period Jan 1 – Sep 26, and said it is not a full-year figure or a risk score. Denver: 9 snow days; Houston: heavy rain on 2.23% of days (6 of 269). Both match the tool output.
 - `history-2026-score` said there is no 2026 risk score because scores cover full years 2016–2025. It offered Denver's 2016–2025 score (`rank_hubs`) or year-to-date stats instead, and invented no number.
 - **Case change after the first run.** The first run passed only `history-2026-score` (1/3 cases, $0.102). The other 6 answers were correct but wrote the period as "Jan 1 – Sep 26" instead of the ISO `2026-01-01` the cases required. The cases now require "2026" and "Jan" (which matches "Jan 1" and "January 1"); the end date moves daily, so it is not pinned, and `expect_tool` still checks that 2026 data was used. The agent and prompt were not changed between the two runs.
