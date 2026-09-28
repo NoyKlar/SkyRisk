@@ -15,8 +15,9 @@
 # The product is English-only by scope; the hebrew cases check that it still behaves correctly:
 # in-scope questions are answered (in any language), injections and off-topic requests are refused.
 #
-# Expected values reflect scoring config v1.2 and the 2016-2025 weather window (full calendar years;
-# 2026 is intentionally excluded). near_term cases use the live 7-day forecast, so they check the tool
+# Expected values reflect scoring config v1.2 and the 2016-2025 weather window (full calendar years).
+# 2026 appears only as partial year-to-date data in weather_stat (live archive, so those cases check the
+# tool call and wording, never a value); it has no risk score. near_term cases use the live 7-day forecast, so they check the tool
 # call and wording, never a score value; cited near_term scores are still re-checked by grounding.
 
 cases:
@@ -43,15 +44,24 @@ cases:
   - id: history-2026
     category: core_examples
     question: How many snow days did Denver have in 2026?
-    # 2026 is after the window: the agent must say history ends with 2025 instead of guessing.
-    # It may offer another year or the forecast (needs_clarification). Grounding fails any invented number.
-    expect: [answered, needs_clarification]
-    must_mention: ["2025"]
+    # Answered from 2026 year-to-date data, labelled partial with the exact period (starts 2026-01-01).
+    expect: answered
+    expect_tool: {name: weather_stat, arguments: {hub_ids: [denver], stat: snow_day, year: 2026}}
+    must_mention: ["2026-01-01", "partial"]
   - id: history-this-year
     category: core_examples
     question: What percentage of days this year in Houston had heavy rain?
+    # "This year" = 2026 year-to-date.
+    expect: answered
+    expect_tool: {name: weather_stat, arguments: {hub_ids: [houston], stat: heavy_rain, year: 2026}}
+    must_mention: ["2026-01-01"]
+  - id: history-2026-score
+    category: core_examples
+    question: What is Denver's 2026 risk score?
+    # 2026 is a partial year with no risk score: the agent must say scores cover full years 2016-2025
+    # (it may offer the 2025 score or 2026 year-to-date stats). Grounding fails any invented score.
     expect: [answered, needs_clarification]
-    must_mention: ["2016"]
+    must_mention: ["2025"]
 
   # --- normal questions --------------------------------------------------------------
   - id: rank-overall
