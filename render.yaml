@@ -14,3 +14,7 @@ services:
         sync: false   # entered in the Render dashboard, never committed
       - key: OPENAI_API_KEY
         sync: false
+      - key: ALERT_TOKEN
+        sync: false   # guards POST /api/alerts/check; unset = the check is disabled
+      - key: ALERT_WEBHOOK_URL
+        sync: false   # optional Slack-compatible incoming webhook for alerts

@@ -1,0 +1,41 @@
+# Daily near-term risk check. Render's free tier sleeps, so SkyRisk has no in-process scheduler:
+# this workflow wakes the service and calls the token-protected check endpoint once a day.
+#
+# Setup (repo Settings -> Secrets and variables -> Actions):
+#   secret   ALERT_TOKEN  = the same value as ALERT_TOKEN on Render
+#   variable SKYRISK_URL  = e.g. https://skyrisk.onrender.com (defaults to that)
+# GitHub pauses scheduled workflows after 60 days without repository activity; re-enable it in the Actions tab.
+name: near-term-check
+
+on:
+  schedule:
+    - cron: "0 11 * * *"   # 11:00 UTC = morning in US time zones
+  workflow_dispatch:
+    inputs:
+      demo_hub:
+        description: "Hub id for a demo alert (e.g. chicago). Leave empty for a real check."
+        required: false
+        default: ""
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: POST /api/alerts/check
+        env:
+          ALERT_TOKEN: ${{ secrets.ALERT_TOKEN }}
+          SKYRISK_URL: ${{ vars.SKYRISK_URL || 'https://skyrisk.onrender.com' }}
+          DEMO_HUB: ${{ inputs.demo_hub }}
+        run: |
+          if [ -z "$ALERT_TOKEN" ]; then echo "::error::ALERT_TOKEN secret is not set"; exit 1; fi
+          if [ -n "$DEMO_HUB" ]; then body="{\"demo_hub\": \"$DEMO_HUB\"}"; else body="{}"; fi
+          # Retries ride out the free tier's 30-60 s cold start.
+          curl -fsS --retry 4 --retry-delay 30 --retry-all-errors --max-time 180 \
+            -X POST "$SKYRISK_URL/api/alerts/check" \
+            -H "Authorization: Bearer $ALERT_TOKEN" -H "Content-Type: application/json" \
+            -d "$body" | tee result.json
+          echo
+          python3 -c "import json; d = json.load(open('result.json')); print(f\"{len(d['hubs_checked'])} hubs, {len(d['baseline_only'])} baseline only, {len(d['alerts'])} alerts, webhook {d['webhook_status']}\")"
