@@ -173,7 +173,7 @@ Run `uv run skyrisk eval --repeat 3` before merging any change to the system pro
 
 **Multi-turn cases.** A case may list `prior_turns`. They are asked first in the same conversation, and only the last reply is checked (see `evals/cases.yaml`). The `follow_up` category (3 cases, one in Hebrew) tests conversation memory. The latest run passed 9/9 for $0.34 (`docs/DESIGN.md` §7).
 
-**Outage path.** `uv run skyrisk eval --simulate-outage anthropic --repeat 3` makes every Anthropic model fail on every call. The agent then runs exactly as it would during an Anthropic outage: the classifier is skipped and OpenAI answers. It needs only `OPENAI_API_KEY`. Reports go to `evals/results/anthropic-outage-*` (`anthropic-outage-latest.*` is committed). The full set costs about $0.02 with `gpt-6-luna`. The latest result is 33/33 cases on both the normal and the outage path (before/after in `docs/DESIGN.md` §7). `skyrisk chat --simulate-outage anthropic` does the same for manual testing.
+**Outage path.** `uv run skyrisk eval --simulate-outage anthropic --repeat 3` makes every Anthropic model fail on every call. The agent then runs exactly as it would during an Anthropic outage: the classifier is skipped and OpenAI answers. It needs only `OPENAI_API_KEY`. Reports go to `evals/results/anthropic-outage-*` (`anthropic-outage-latest.*` is committed). The full set costs about $0.03 with `gpt-6-luna`. The latest result, after the near-term layer, is 42/42 cases on both the normal and the outage path (`docs/DESIGN.md` §7). `skyrisk chat --simulate-outage anthropic` does the same for manual testing.
 
 ```bash
 uv run skyrisk eval-classifier --repeat 3 --dry-run   # print the call and cost estimate, make no calls

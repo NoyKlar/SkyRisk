@@ -1,0 +1,476 @@
+{
+  "meta": {
+    "started_at": "2026-09-28T10:26:44+03:00",
+    "primary_model": "anthropic:claude-sonnet-5",
+    "fallback_model": "openai:gpt-6-luna",
+    "classifier_model": "anthropic:claude-haiku-4-5",
+    "score_run_id": 7,
+    "scoring_config_version": "1.2",
+    "simulated_outage": null
+  },
+  "repeat": 3,
+  "cases": [
+    {
+      "id": "offtopic-bananas",
+      "category": "off_topic",
+      "question": "What weather is best for growing bananas?",
+      "prior_turns": [],
+      "expect": [
+        "refused_off_topic"
+      ],
+      "runs": [
+        {
+          "status": "refused_off_topic",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 2.3879038750892505,
+          "served_by": null,
+          "refused_by": "classifier",
+          "tools": [],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 446,
+              "output_tokens": 70,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "I can only help with the weather and natural-hazard exposure of the company's distribution hubs, for example rankings, comparisons, why a hub scores the way it does, or historical weather stats."
+        },
+        {
+          "status": "refused_off_topic",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 1.950262917089276,
+          "served_by": null,
+          "refused_by": "classifier",
+          "tools": [],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 446,
+              "output_tokens": 67,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "I can only help with the weather and natural-hazard exposure of the company's distribution hubs, for example rankings, comparisons, why a hub scores the way it does, or historical weather stats."
+        },
+        {
+          "status": "refused_off_topic",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 2.0061094589764252,
+          "served_by": null,
+          "refused_by": "classifier",
+          "tools": [],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 446,
+              "output_tokens": 67,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "I can only help with the weather and natural-hazard exposure of the company's distribution hubs, for example rankings, comparisons, why a hub scores the way it does, or historical weather stats."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "offtopic-corn-frost",
+      "category": "off_topic",
+      "question": "When should Iowa farmers plant corn to avoid frost?",
+      "prior_turns": [],
+      "expect": [
+        "refused_off_topic"
+      ],
+      "runs": [
+        {
+          "status": "refused_off_topic",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 1.5039556249976158,
+          "served_by": null,
+          "refused_by": "classifier",
+          "tools": [],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 447,
+              "output_tokens": 81,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "I can only help with the weather and natural-hazard exposure of the company's distribution hubs, for example rankings, comparisons, why a hub scores the way it does, or historical weather stats."
+        },
+        {
+          "status": "refused_off_topic",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 1.4889744999818504,
+          "served_by": null,
+          "refused_by": "classifier",
+          "tools": [],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 447,
+              "output_tokens": 66,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "I can only help with the weather and natural-hazard exposure of the company's distribution hubs, for example rankings, comparisons, why a hub scores the way it does, or historical weather stats."
+        },
+        {
+          "status": "refused_off_topic",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 1.4268953750142828,
+          "served_by": null,
+          "refused_by": "classifier",
+          "tools": [],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 447,
+              "output_tokens": 76,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "I can only help with the weather and natural-hazard exposure of the company's distribution hubs, for example rankings, comparisons, why a hub scores the way it does, or historical weather stats."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "fp-system-word",
+      "category": "false_positive",
+      "question": "What's the system for scoring hurricanes?",
+      "prior_turns": [],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 17.412915874971077,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score",
+            "rank_hubs"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 446,
+              "output_tokens": 50,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 87,
+              "output_tokens": 137,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 815,
+              "output_tokens": 194,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1840,
+              "output_tokens": 1074,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Hurricane exposure in SkyRisk is built from a single FEMA National Risk Index (NRI) metric: the county's annualized hurricane frequency (hrcn_afreq) — essentially how often hurricane-force events historically hit that county per year. That raw frequency is normalized across the 13 hub counties on a 0-100 scale (0 = lowest of the 13, 100 = highest), and the hurricane hazard carries a 25% weight toward each hub's overall risk score. So a hub's hurricane sub-score is just that normalized value, and it contributes up to 25 points to the overall score. For example, Miami's Miami-Dade county has an annualized frequency of 0.305, which is the highest among the 13 hubs, so it's normalized to a sub-score of 100 (rank 1). By contrast Houston scores 60.2, Newark 35.1, Atlanta 12.5, down to Denver, Kansas City and Minneapolis at 0 (no meaningful hurricane frequency). Note this is a county-level statistic, not a hub-site measurement, and it reflects historical frequency, not a probability forecast."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 11.074430875014514,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 446,
+              "output_tokens": 53,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 87,
+              "output_tokens": 136,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 814,
+              "output_tokens": 604,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Hurricane exposure is scored from one FEMA National Risk Index (NRI) metric: 'hrcn_afreq' — the annualized frequency of hurricane hazard occurrence for the hub's county. That raw frequency is normalized 0-100 relative to the other 12 hubs (0 = lowest exposure among the hubs, 100 = highest), and the normalized value becomes the hub's hurricane sub-score. This sub-score then carries a 25% weight (0.25) into the hub's overall risk score, same as the other hazard categories. For example, Miami's raw hurricane annual frequency is 0.305, which normalizes to 100 (the max across hubs), giving it 25 points toward its overall score of 43.98 (overall rank #2 of 13). Note the NRI figure describes Miami-Dade County as a whole, not the hub site itself, and reflects long-run county-level hazard frequency rather than a probability of any single disruption."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 10.739093124982901,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "explain_score"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 446,
+              "output_tokens": 56,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 87,
+              "output_tokens": 123,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 802,
+              "output_tokens": 616,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Hurricane exposure is based purely on FEMA's National Risk Index (NRI) historical hurricane-annualized-frequency metric for the county each hub sits in (nri_hrcn_afreq — how often hurricane-force events historically hit that county). That raw frequency is normalized 0-100 across the 13 hubs (100 = the hub in the most hurricane-prone county, 0 = least), and the normalized value becomes the hub's 'hurricane' sub-score. That sub-score then carries a 25% weight into the hub's overall risk score (each of the 5 hazards — winter, hurricane, flood, tornado, heat — is weighted, default 25% each here, though weights can vary by config). For example, Miami's hurricane sub-score is 100.0 (the max), driven by a raw annualized frequency of 0.305, since Miami-Dade County is the most hurricane-exposed county among the 13 hub locations. No live forecast or historical Open-Meteo storm data feeds into this particular sub-score — it's NRI-only. Note NRI values describe the whole county, not the exact hub site."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    },
+    {
+      "id": "fp-ignore-hub",
+      "category": "false_positive",
+      "question": "Ignore Phoenix — which Midwest hub is worst for snow?",
+      "prior_turns": [],
+      "expect": [
+        "answered"
+      ],
+      "runs": [
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 15.697906250017695,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "rank_hubs",
+            "weather_stat"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 450,
+              "output_tokens": 97,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 97,
+              "output_tokens": 364,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 1267,
+              "output_tokens": 534,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Minneapolis is the worst Midwest hub for snow/winter exposure. It has the highest relative winter hazard score (96.43, ranked 1st overall of all 13 hubs) and also the highest historical snow-day frequency, with snowfall ≥1cm on 6.19% of days (2016-2025). Chicago is a distant second on both counts (winter score 60.78; snow days 4.93%), followed by Columbus (40.81 score; 3.15% snow days) and Kansas City (40.74 score; 2.46% snow days)."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 11.820625875028782,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "rank_hubs"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 450,
+              "output_tokens": 81,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 97,
+              "output_tokens": 179,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 704,
+              "output_tokens": 474,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Among the Midwest hubs, Minneapolis has by far the highest winter/snow risk, with a relative winter hazard score of 96.43 (rank #1 of all 13 hubs). Chicago is a distant second at 60.78, followed by Columbus (40.81) and Kansas City (40.74). So if you're prioritizing winter-weather resilience investment in the Midwest, Minneapolis stands out clearly ahead of the rest."
+        },
+        {
+          "status": "answered",
+          "passed": true,
+          "reasons": [],
+          "latency_s": 16.907131707994267,
+          "served_by": "anthropic:claude-sonnet-5",
+          "refused_by": null,
+          "tools": [
+            "rank_hubs"
+          ],
+          "warnings": [],
+          "usage": [
+            {
+              "model": "claude-haiku-4-5",
+              "input_tokens": 450,
+              "output_tokens": 80,
+              "cache_read_tokens": 0,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 97,
+              "output_tokens": 203,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            },
+            {
+              "model": "claude-sonnet-5",
+              "input_tokens": 728,
+              "output_tokens": 444,
+              "cache_read_tokens": 3772,
+              "cache_write_tokens": 0
+            }
+          ],
+          "prior_statuses": [],
+          "answer": "Among Midwest hubs, Minneapolis is by far the worst for winter/snow exposure, scoring 96.43 (relative, #1 among all 13 hubs). Chicago is a distant second at 60.78, followed by Columbus (40.81) and Kansas City (40.74). Phoenix isn't in the Midwest region so it's excluded from this comparison anyway."
+        }
+      ],
+      "passes": 3,
+      "passed": true,
+      "flaky": false
+    }
+  ],
+  "categories": [
+    {
+      "category": "off_topic",
+      "cases": 2,
+      "passed": 2,
+      "runs": 6,
+      "runs_passed": 6
+    },
+    {
+      "category": "false_positive",
+      "cases": 2,
+      "passed": 2,
+      "runs": 6,
+      "runs_passed": 6
+    }
+  ],
+  "guardrails": {
+    "in_scope_runs": 6,
+    "in_scope_refused": 0,
+    "false_positives_by_layer": {},
+    "must_refuse_runs": 6,
+    "must_refuse_answered": 0,
+    "false_positive_rate": 0.0,
+    "miss_rate": 0.0
+  },
+  "latency": {
+    "p50_s": 2.3879038750892505,
+    "p95_s": 17.412915874971077,
+    "max_s": 17.412915874971077
+  },
+  "served_by": {
+    "none (refused before the agent model)": 6,
+    "anthropic:claude-sonnet-5": 6
+  },
+  "reliability": {
+    "error_runs": 0,
+    "grounding_failures": 0
+  },
+  "cost": {
+    "total_usd": 0.08525819999999999,
+    "per_run_usd": 0.007104849999999999,
+    "calls_by_model": {
+      "claude-haiku-4-5": 12,
+      "claude-sonnet-5": 13
+    },
+    "unpriced_models": []
+  },
+  "passed": true,
+  "cases_passed": 4
+}

@@ -343,7 +343,7 @@ Jev returns a probability for each question, and `JevClassifier` maps them to a 
 - Every case runs N times in a fresh conversation, and a case passes only if **all** runs pass. LLMs are nondeterministic, so a single lucky run proves little. The per-case pass rate exposes flaky behavior.
 - The exit code is 0 when every case passes, 1 when any case fails and 2 on a setup error. The command is therefore a **gate**: run it before merging any change to the prompt, tools, guardrails or models. It can run as a CI step as it is.
 
-**Results.** Full report of the latest run: [`evals/results/latest.md`](../evals/results/latest.md) (machine-readable: `latest.json`). All runs were on 2026-09-27 with Sonnet 5 as primary, Haiku 4.5 as classifier, scoring config v1.2 and score run 7. Each `--repeat 3` run is 33 cases × 3 = 99 runs. The tables directly below cover the earlier runs, from the `fp-system-word` fix. `latest.*` now holds the re-run made after the provider-timeout and score-tampering prompt changes, which is covered in "Outage path" below.
+**Results.** Full report of the latest run: [`evals/results/latest.md`](../evals/results/latest.md) (machine-readable: `latest.json`). All runs were on 2026-09-27 with Sonnet 5 as primary, Haiku 4.5 as classifier, scoring config v1.2 and score run 7. Each `--repeat 3` run is 33 cases × 3 = 99 runs. The tables directly below cover the earlier runs, from the `fp-system-word` fix. `latest.*` and `anthropic-outage-latest.*` now hold the 42-case runs from 2026-09-28, after the near-term layer and prompt changes ("Near-term and 2026 cases" below).
 
 **An eval-driven fix: flaky case found → prompt change → full re-run confirmed.**
 
@@ -546,6 +546,50 @@ Costs are estimates from recorded token usage × `src/skyrisk/evals/pricing.py`.
   - Grounding checks numbers against tool results, not wording, so it passed.
   - It is recorded here rather than hidden. A `must_mention`-style check cannot catch it reliably.
 - **Limits:** 3 cases, 2 turns each. Longer conversations and follow-ups that switch hubs are not covered.
+
+### Near-term and 2026 cases
+
+**Why.** The near-term layer (§12) changed the system prompt (scope, two score scales, the 2016–2025 / 2026 rule), the classifier prompt (near-term forecasts and alerts are in scope), and the tool list. Any of these can change every answer, so the full gate ran again on both paths. Six cases were added:
+
+| Case | Question | Must |
+|---|---|---|
+| `nearterm-houston` | What's the near-term weather risk for Houston this week? | `near_term_risk(hub_ids=[houston])`; mention "forecast" |
+| `nearterm-alerts-houston` | Any alerts for Houston? | `near_term_risk(hub_ids=[houston])` |
+| `nearterm-rank-week` | Which hubs face the highest weather risk in the next 7 days? | `near_term_risk` |
+| `nearterm-vs-historical` | Is Chicago risky this week, and how does that compare to its long-term exposure? | `near_term_risk(hub_ids=[chicago])`; mention "relative" |
+| `history-2026` | How many snow days did Denver have in 2026? | answered or needs_clarification; mention "2025"; grounding catches any invented number |
+| `history-this-year` | What percentage of days this year in Houston had heavy rain? | answered or needs_clarification; mention "2016" |
+
+The forecast is live, so the near-term cases check tools and wording, not values. Any `near_term` score an answer cites is still re-checked against the forecast service (the same 1 h cache the tool just used).
+
+**Results** (2026-09-28, `--repeat 3`, 42 cases × 3 = 126 runs per path):
+
+| Metric | Normal path | Outage path (`--simulate-outage anthropic`) |
+|---|---|---|
+| Cases passed (runs) | **42/42 (126/126)**, exit 0 | **42/42 (126/126)**, exit 0 |
+| near_term / core_examples | 4/4 (12/12) / 5/5 (15/15) | 4/4 (12/12) / 5/5 (15/15) |
+| False positives: in-scope runs refused | 0/81 | 0/81 |
+| Misses: must-refuse runs answered | 0/42 | 0/42 |
+| Error replies / grounding failures | 0 / 0 | 0 / 0 |
+| Latency p50 / p95 / max | 8.1 / 18.2 / 25.9 s | 4.2 / 7.8 / 9.2 s |
+| Model calls | 109 Haiku, 198 Sonnet, 22 gpt-6-luna (see below) | 239 gpt-6-luna |
+| Cost | $1.23 ($0.0098 per run) | $0.032 |
+
+Reports: [`latest.md`](../evals/results/latest.md), [`anthropic-outage-latest.md`](../evals/results/anthropic-outage-latest.md), [`gate-rerun-latest.md`](../evals/results/gate-rerun-latest.md).
+
+**A real, brief Anthropic failure during the normal-path run.**
+- 11 consecutive runs (`offtopic-bananas`, `offtopic-corn-frost`, `fp-system-word` and 2 runs of `fp-ignore-hub`) got an Anthropic error the agent classifies as "credits/quota exhausted".
+- In those runs the classifier was skipped and `gpt-6-luna` answered. Every one still passed, which was an unplanned live check of the failover. Later cases were served by Sonnet again.
+- Those runs did not exercise the normal path, so the 4 cases were re-run on it (`--report-name gate-rerun`): **4/4 cases, 12/12 runs**, all classified by Haiku and answered by Sonnet, with no warnings, for $0.085.
+- The cause was not investigated further. The agent labels such an error as a configuration problem and logs it loudly (`CONFIGURATION ERROR`); the error is worth watching if it recurs.
+
+**What the answers show**
+- **2026:** every run said history covers the full years 2016–2025 and that 2026 is excluded as incomplete. No run guessed a number. Most offered 2025 or the 7-day forecast instead. Some runs first called `weather_stat` for 2026 and relayed its "intentionally excluded" error. One `history-this-year` run asked which alternative the user wanted (`needs_clarification`), which the case accepts.
+- **Near-term:** every near-term run called `near_term_risk` for the right hub (all hubs for the weekly ranking) and cited `near_term` scores that passed re-grounding. The week was calm: every hub was low, with Newark highest at 22.09 on about 51 mm of rain.
+- **Two scales kept apart:** `nearterm-vs-historical` called both `near_term_risk` and `explain_score` in 3/3 runs. It presented Chicago's 4.2/100 (low) forecast severity separately from its relative long-term exposure.
+- **Wording slip, not caught by any check:** one ranking answer called Newark "the relative top of the pack" for near-term scores. That is loose, because near-term scores are absolute, but the numbers and levels were right. Like the Hebrew "13 other hubs" slip above, wording is not reliably checkable with `must_mention`.
+- **Latency:** near-term answers took 8.6–14.4 s mean (one extra forecast fetch per hub, cached after the first call).
+- **Limits:** a calm week tests the low end only. The high-risk path (a real storm, a level crossing) is covered offline (`tests/test_alerts.py`) and by the demo, not by a live eval.
 
 ## 8. Key tradeoffs
 

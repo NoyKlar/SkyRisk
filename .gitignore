@@ -14,3 +14,5 @@ evals/results/*
 !evals/results/anthropic-outage-latest.json
 !evals/results/followup-latest.md
 !evals/results/followup-latest.json
+!evals/results/gate-rerun-latest.md
+!evals/results/gate-rerun-latest.json
