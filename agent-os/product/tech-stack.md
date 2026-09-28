@@ -10,11 +10,11 @@
 - FastAPI, served by uvicorn (`skyrisk serve`)
 - Pydantic v2
 - httpx (calls to public data APIs)
-- APScheduler (daily score recompute + alert webhook)
+- GitHub Actions cron (daily near-term alert check via a token-protected endpoint; the free Render service sleeps, so there is no in-process scheduler)
 
 ## Database
 
-- SQLite — hubs, cached weather/hazard data, computed scores, score history for alerts
+- SQLite — hubs, cached weather/hazard data, computed scores, near-term snapshots and alerts (ephemeral on Render's free tier; production would use Postgres)
 
 ## LLM
 
@@ -24,12 +24,13 @@
 
 ## Data Sources
 
-- Open-Meteo historical weather API
+- Open-Meteo historical weather API (full years 2016–2025)
+- Open-Meteo forecast API (7-day daily forecast, near-term risk)
 - FEMA National Risk Index
 
 ## Other
 
 - **Package manager:** uv
 - **Testing:** pytest (scoring unit tests) + custom eval runner script
-- **Hosting:** Render or Railway (single Python service)
+- **Hosting:** Render (single free Python web service)
 - **Config:** `.env` for API keys, never committed

@@ -1,6 +1,10 @@
 # SkyRisk
 
-SkyRisk scores the weather risk of US logistics hubs and answers analysts' questions about it through a conversational agent. Every score comes from deterministic code over public data (Open-Meteo, FEMA NRI). The LLM only interprets the question, calls tools, and explains the results.
+SkyRisk scores the weather risk of US logistics hubs and answers analysts' questions about it through a conversational agent. It has two separate scores per hub:
+- **historical exposure**: where to invest, from 2016–2025 history and FEMA NRI, relative across hubs
+- **near-term risk**: what's coming this week, from the 7-day forecast, absolute 0–100 with low/medium/high alerts
+
+Every score comes from deterministic code over public data (Open-Meteo, FEMA NRI). The LLM only interprets the question, calls tools, and explains the results.
 
 Architecture, methodology and tradeoffs are in **[docs/DESIGN.md](docs/DESIGN.md)**.
 
@@ -30,18 +34,20 @@ cp .env.example .env
 | `JEV_API_KEY` | no | TypeSafe Jev classifier. Not used by default; only for re-testing with `SKYRISK_CLASSIFIER=jev` or `skyrisk eval-classifier`. |
 | `SKYRISK_PRIMARY_MODEL`, `SKYRISK_FALLBACK_MODEL`, `SKYRISK_CLASSIFIER_MODEL` | no | override the model ids in `config/agent.yaml` (`SKYRISK_CLASSIFIER_MODEL` is the Haiku classifier model) |
 | `SKYRISK_CLASSIFIER` | no | `haiku` (default: Haiku alone, skipped if it fails) or `jev` (opt-in re-testing: Jev first, Haiku as its fallback) |
+| `ALERT_TOKEN` | no | secret that guards `POST /api/alerts/check`. Unset = the check is disabled (`503`). |
+| `ALERT_WEBHOOK_URL` | no | Slack-compatible incoming webhook for alerts. Unset = alerts are only stored and listed. |
 
 `.env` is gitignored. Ingest, score, show and the offline tests need no keys.
 
 ## 4. Load data and score
 
 ```bash
-uv run skyrisk ingest        # fetch Open-Meteo 2016–2025 daily weather + FEMA NRI county data into data/skyrisk.db
+uv run skyrisk ingest        # fetch Open-Meteo daily weather for the full years 2016–2025 + FEMA NRI county data into data/skyrisk.db
 uv run skyrisk score         # compute, store and print a ranked score run
 uv run skyrisk show chicago  # explain one hub's latest scores, metric by metric
 ```
 
-`ingest` caches everything in SQLite, so re-running it is instant. `--refresh` re-fetches the data, and `--hub ID` limits the run to one hub. \
+The historical window is fixed at full calendar years **2016–2025**. 2026 is intentionally excluded because it is not a complete year, and the agent says so instead of guessing (the near-term forecast covers "this week"). `ingest` caches everything in SQLite, so re-running it is instant. `--refresh` re-fetches the data, and `--hub ID` limits the run to one hub. \
 Hubs, weights and thresholds live in `config/hubs.yaml` and `config/scoring.yaml`.
 
 ## 5. Chat in the terminal
@@ -65,24 +71,72 @@ The page at `/` is plain HTML/CSS/JS served by the same process. It talks only t
 | `POST` | `/api/chat` | `{"message", "session_id"?}` → answer, limitations, scores cited, model and tools used, `session_id` |
 | `DELETE` | `/api/sessions/{id}` | clear a conversation's memory |
 | `GET` | `/api/hubs` | the hubs you can ask about (id, name, city, state, region) |
+| `POST` | `/api/alerts/check` | recompute near-term scores and create alerts. Needs `Authorization: Bearer $ALERT_TOKEN`; body `{"demo_hub": "chicago"}` for a demo (see [section 7](#7-near-term-risk-and-alerts)) |
+| `GET` | `/api/alerts` | recent alerts (`?limit=` up to 50, `?hub_id=`) and the time of the last check; shown in the chat page's side panel |
 | `GET` | `/api/health` | liveness check |
 | `GET` | `/api/docs` | OpenAPI docs |
 
-`POST /api/chat` is rate limited under `rate_limit:` in `config/agent.yaml`: 20 questions per IP per hour and 100 per day in total. Past a limit it returns `429` with a friendly `detail` message and a `Retry-After` header (see [Deployment](#9-deployment-render)).
+`POST /api/chat` is rate limited under `rate_limit:` in `config/agent.yaml`: 20 questions per IP per hour and 100 per day in total. Past a limit it returns `429` with a friendly `detail` message and a `Retry-After` header (see [Deployment](#10-deployment-render)).
 
 Omit `session_id` on the first message, and send the returned id back with follow-ups. \
 Conversation memory lives in the server process. A session expires after 1 hour idle, at most 500 are kept, and all of them are lost on restart. If you send an expired id, a new session starts and the reply has `"session_reset": true`.
 
-## 7. Tests
+## 7. Near-term risk and alerts
+
+**The score.** For each hub, `skyrisk` fetches the Open-Meteo 7-day forecast and scores four hazards: snowfall, wind gusts, precipitation and extreme heat.
+- Each day's value ramps from 0 at a `watch` threshold to full severity at a `severe` threshold, weighted down for later days.
+- The worst day per hazard earns up to `max_points`, and the score is the sum, capped at 100: **low** < 35 ≤ **medium** < 65 ≤ **high**.
+- One hazard at full severity tomorrow reaches "high" on its own.
+- Thresholds and weights live in [`config/near_term.yaml`](config/near_term.yaml) (versioned). Details are in `docs/DESIGN.md` §12.
+- It is an absolute forecast severity, **not** comparable with the relative historical scores.
+
+**Alerts.** A check scores every hub, compares each score with the hub's last stored snapshot, and creates an alert when the score moves by 20 or more (`alerts.change_threshold`) or the level changes, in either direction.
+- New alerts are stored in SQLite and sent as **one** Slack-compatible message to `ALERT_WEBHOOK_URL`, if it is set.
+- A hub with no snapshot yet, e.g. after a restart, only gets a baseline.
 
 ```bash
-uv run pytest                # offline: scoring, ingest parsing, agent loop, guardrails, API, eval runner (no network, no keys)
-uv run pytest -m live        # live smoke tests against Open-Meteo, FEMA, Claude and OpenAI (uses API credits)
+uv run skyrisk alerts check                 # run a check locally (no token needed)
+uv run skyrisk alerts check --demo chicago  # demo: simulate a storm for Chicago
+uv run skyrisk alerts list                  # recent alerts
 ```
 
-## 8. Evals
+**Demo mode.** A demo check merges a scripted storm (`demo:` in `config/near_term.yaml`: 30 cm snow and 95 km/h gusts tomorrow) into one hub's real forecast and scores it with the same engine.
+- The alert compares that result with the hub's live score, is marked `demo` (`[DEMO]` in the webhook, a DEMO badge in the page), and saves **no** snapshot, so the next real check is unaffected.
+- On the deployed service:
+  ```bash
+  curl -X POST https://skyrisk.onrender.com/api/alerts/check \
+    -H "Authorization: Bearer $ALERT_TOKEN" -H "Content-Type: application/json" -d '{"demo_hub": "chicago"}'
+  ```
+- Or run the GitHub workflow manually with a `demo_hub` input. The alert then appears in the page's "Recent alerts" panel.
 
-`skyrisk eval` runs every case in [`evals/cases.yaml`](evals/cases.yaml) against the **real agent**. The cases cover core examples, normal questions, injections, off-topic requests, guardrail false-positive look-alikes, and Hebrew. Each run is checked for:
+**Daily schedule (GitHub Actions).** Render's free tier sleeps, so there is no in-process scheduler. [`.github/workflows/near-term-check.yml`](.github/workflows/near-term-check.yml) calls the endpoint at 11:00 UTC every day, and its retries ride out the cold start. Setup:
+1. Generate a token: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+2. Set it as `ALERT_TOKEN` in the Render dashboard (and optionally `ALERT_WEBHOOK_URL`).
+3. In GitHub → Settings → Secrets and variables → Actions:
+   - add the secret `ALERT_TOKEN` (the same value)
+   - optionally, the variable `SKYRISK_URL` (default `https://skyrisk.onrender.com`)
+4. Run the workflow once from the Actions tab to set the first baseline.
+
+GitHub pauses scheduled workflows after 60 days without repository activity; re-enable it in the Actions tab.
+
+**Known limitation: ephemeral storage.** On Render's free tier the SQLite file is rebuilt on every deploy, and anything written at runtime is lost on a restart or spin-down. After a restart:
+- the first check only sets a new baseline, so a change that happened across the restart is not alerted
+- the alert list starts empty
+
+Production would keep snapshots and alerts in Postgres (`docs/DESIGN.md` §8, §12).
+
+**In chat.** The agent's `near_term_risk` tool answers "What's the near-term risk for Houston?" and "Any alerts for Houston?". It fetches the live forecast, cached for 1 hour. It never writes snapshots, so chat traffic can't move the alert baseline.
+
+## 8. Tests
+
+```bash
+uv run pytest                # offline: scoring, ingest parsing, near-term engine + alerts, agent loop, guardrails, API, eval runner (no network, no keys)
+uv run pytest -m live        # live smoke tests against Open-Meteo (archive + forecast), FEMA, Claude and OpenAI (uses API credits)
+```
+
+## 9. Evals
+
+`skyrisk eval` runs every case in [`evals/cases.yaml`](evals/cases.yaml) against the **real agent**. The cases cover core examples, normal questions, follow-ups, near-term forecast and alert questions, injections, off-topic requests, guardrail false-positive look-alikes, and Hebrew. Each run is checked for:
 - status
 - the expected tool and arguments
 - required mentions and hub order
@@ -131,14 +185,14 @@ It writes `evals/results/classifier-<timestamp>.*` (gitignored) and `classifier-
 
 **Cost.** Deterministic injection cases make no model calls. Every other run makes one Haiku classifier call. Runs that reach the agent also make roughly 2–4 Sonnet calls: tool rounds plus the final answer. A full `--repeat 3` run costs about 85 Haiku calls and 100–250 Sonnet calls.
 
-## 9. Deployment (Render)
+## 10. Deployment (Render)
 
 [`render.yaml`](render.yaml) is a Render Blueprint for a single **free** web service.
 
 **Steps**
 1. Push the repo to GitHub.
 2. In Render, choose **New → Blueprint** and select the repo.
-3. When prompted, enter `ANTHROPIC_API_KEY` (required) and `OPENAI_API_KEY` (optional, for the fallback).
+3. When prompted, enter `ANTHROPIC_API_KEY` (required), `OPENAI_API_KEY` (optional, for the fallback), and `ALERT_TOKEN` / `ALERT_WEBHOOK_URL` (optional, for alerts; see [section 7](#7-near-term-risk-and-alerts)).
    - These are `sync: false` in `render.yaml`, so they live only in the Render dashboard and are never committed.
    - The `SKYRISK_*_MODEL` overrides from [section 3](#3-configure-env) can be added there too.
 4. Wait for the first build, then open the service URL (the live demo is at <https://skyrisk.onrender.com>).
@@ -154,7 +208,7 @@ It writes `evals/results/classifier-<timestamp>.*` (gitignored) and `classifier-
 
 **Free-tier behaviour**
 - After 15 minutes without traffic the service spins down. The next request waits through a **cold start of about 30–60 s**.
-- A restart or spin-down clears everything held in memory: chat sessions (the page starts a new conversation and says so) and the rate-limit counters.
+- A restart or spin-down clears everything held in memory (chat sessions, where the page starts a new conversation and says so, and the rate-limit counters) and everything written to disk at runtime (near-term snapshots and alerts).
 
 **Protecting API credits**
 - The public URL lets anyone reach paid model calls. Each question costs one Haiku call, plus roughly 2–4 Sonnet calls if it reaches the agent.
@@ -168,7 +222,7 @@ It writes `evals/results/classifier-<timestamp>.*` (gitignored) and `classifier-
 - The client IP header can be spoofed, so treat the per-IP limit as fairness and the daily cap as the real bound.
 - The counters are in memory, so a restart resets them. Also set a monthly spend limit in the Anthropic (and OpenAI) console.
 
-## 10. Adding or removing a hub
+## 11. Adding or removing a hub
 
 1. Edit [`config/hubs.yaml`](config/hubs.yaml). Each entry needs:
    - `id`: lowercase letters, digits and hyphens; must be unique
@@ -200,12 +254,14 @@ It writes `evals/results/classifier-<timestamp>.*` (gitignored) and `classifier-
 ## Project layout
 
 ```
-config/        hubs, scoring weights/thresholds (versioned), agent/model settings
+config/        hubs, scoring weights/thresholds (versioned), near-term forecast thresholds (versioned), agent/model settings
 evals/         cases.yaml + results/latest.{md,json}, results/classifier-latest.{md,json}
-src/skyrisk/   ingest/ (API clients), scoring/ (pure engine), agent/ (tools, guardrails, Jev classifier, providers, loop),
+src/skyrisk/   ingest/ (API clients), scoring/ (pure engine), nearterm/ (forecast engine, cached service, alert check),
+               agent/ (tools, guardrails, Jev classifier, providers, loop),
                api/ (FastAPI + static chat page), evals/ (runner, checks, report, classifier benchmark), cli.py
 tests/         offline tests with recorded fixtures and a scripted fake LLM provider
 docs/          DESIGN.md
 render.yaml    Render Blueprint (build: ingest + score; start: serve)
+.github/       workflows/near-term-check.yml: daily alert check (cron)
 agent-os/      product mission/roadmap, standards, and one spec folder per feature
 ```
