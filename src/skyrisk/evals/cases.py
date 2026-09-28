@@ -8,7 +8,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-Category = Literal["core_examples", "normal", "follow_up", "injection", "off_topic", "false_positive", "hebrew"]
+Category = Literal["core_examples", "normal", "follow_up", "near_term", "injection", "off_topic", "false_positive", "hebrew"]
 Expect = Literal["answered", "refused_off_topic", "refused_injection", "needs_clarification"]
 Layer = Literal["deterministic", "classifier", "none"]
 

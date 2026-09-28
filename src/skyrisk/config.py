@@ -111,6 +111,76 @@ class ScoringConfig(BaseModel):
         return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+ForecastVariable = Literal["snowfall_cm", "temp_max_c", "temp_min_c", "precip_mm", "wind_gust_max_kmh"]
+Level = Literal["low", "medium", "high"]
+
+
+class NearTermHazard(BaseModel):
+    variable: ForecastVariable
+    watch: float
+    severe: float
+    max_points: float = Field(gt=0, le=100)
+
+    @model_validator(mode="after")
+    def _ramp(self) -> NearTermHazard:
+        if self.severe <= self.watch:
+            raise ValueError(f"severe ({self.severe}) must be above watch ({self.watch})")
+        return self
+
+
+class Levels(BaseModel):
+    medium: float = Field(gt=0, lt=100)
+    high: float = Field(gt=0, le=100)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> Levels:
+        if self.high <= self.medium:
+            raise ValueError("levels.high must be above levels.medium")
+        return self
+
+
+class AlertRules(BaseModel):
+    change_threshold: float = Field(gt=0, le=100)
+
+
+class DemoScenario(BaseModel):
+    day_offset: int = Field(ge=0)
+    values: dict[ForecastVariable, float] = Field(min_length=1)
+
+
+class NearTermConfig(BaseModel):
+    version: str
+    forecast_days: int = Field(ge=1, le=16)
+    lead_time_weights: list[float]
+    hazards: dict[str, NearTermHazard] = Field(min_length=1)
+    levels: Levels
+    alerts: AlertRules
+    cache_ttl_s: float = Field(gt=0)
+    demo: DemoScenario
+
+    @model_validator(mode="after")
+    def _consistent(self) -> NearTermConfig:
+        if len(self.lead_time_weights) != self.forecast_days:
+            raise ValueError(f"lead_time_weights needs {self.forecast_days} entries, got {len(self.lead_time_weights)}")
+        if any(not 0 < w <= 1 for w in self.lead_time_weights):
+            raise ValueError("lead_time_weights must be in (0, 1]")
+        weak = sorted(n for n, h in self.hazards.items() if h.max_points < self.levels.high)
+        if weak:  # one hazard at full severity must be able to reach "high" on its own
+            raise ValueError(f"max_points below levels.high ({self.levels.high}) for: {weak}")
+        if self.demo.day_offset >= self.forecast_days:
+            raise ValueError("demo.day_offset must be inside the forecast window")
+        return self
+
+    def level_for(self, score: float) -> Level:
+        if score >= self.levels.high:
+            return "high"
+        return "medium" if score >= self.levels.medium else "low"
+
+    def config_hash(self) -> str:
+        canonical = json.dumps(self.model_dump(mode="json"), sort_keys=True)
+        return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 class ModelConfig(BaseModel):
     provider: Literal["anthropic", "openai"]
     model: str
@@ -199,6 +269,10 @@ def load_hubs(path: Path) -> HubRegistry:
 
 def load_scoring_config(path: Path) -> ScoringConfig:
     return ScoringConfig.model_validate(yaml.safe_load(path.read_text()))
+
+
+def load_near_term_config(path: Path) -> NearTermConfig:
+    return NearTermConfig.model_validate(yaml.safe_load(path.read_text()))
 
 
 def load_agent_config(path: Path) -> AgentConfig:

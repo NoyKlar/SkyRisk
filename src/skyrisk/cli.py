@@ -1,4 +1,4 @@
-"""Command-line entry point: `skyrisk ingest | score | show | chat | serve | eval | eval-classifier`."""
+"""Command-line entry point: `skyrisk ingest | score | show | chat | serve | eval | eval-classifier | alerts`."""
 
 from __future__ import annotations
 
@@ -23,13 +23,27 @@ from skyrisk.agent.factory import (
     build_classifiers,
 )
 from skyrisk.agent.tools import ExplainScoreInput, ToolContext, ToolError, explain_score
-from skyrisk.config import CLASSIFIER_NAMES, load_agent_config, load_hubs, load_scoring_config
+from skyrisk.config import (
+    CLASSIFIER_NAMES,
+    HubRegistry,
+    load_agent_config,
+    load_hubs,
+    load_near_term_config,
+    load_scoring_config,
+)
 from skyrisk.evals import classifier_bench
 from skyrisk.evals.cases import load_cases
 from skyrisk.evals.report import write_reports
 from skyrisk.evals.runner import EvalMeta, run_evals
+from skyrisk.ingest import http
+from skyrisk.ingest.open_meteo import fetch_forecast
+from skyrisk.nearterm import alerts as nt_alerts
+from skyrisk.nearterm.alerts import Notify
+from skyrisk.nearterm.service import NearTermService, NearTermUnavailable
 
 HTTP_TIMEOUT_S = 60.0
+FORECAST_TIMEOUT_S = 10.0  # forecasts are fetched while a user waits (chat) or a cron job waits (alerts)
+NEAR_TERM_COMMANDS = ("chat", "serve", "eval", "alerts")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -68,6 +82,14 @@ def _parser() -> argparse.ArgumentParser:
     ev.add_argument("--simulate-outage", choices=OUTAGE_VENDORS, metavar="VENDOR",
                     help="make every model from VENDOR (anthropic|openai) fail, e.g. anthropic: OpenAI answers and "
                          "the classifier is skipped; reports go to <VENDOR>-outage-*")
+
+    al = sub.add_parser("alerts", help="near-term risk alerts (7-day forecast)")
+    al_sub = al.add_subparsers(dest="alerts_command", required=True)
+    al_check = al_sub.add_parser("check", help="recompute near-term scores, compare with the last snapshot, "
+                                               "store alerts and post the webhook (ALERT_WEBHOOK_URL)")
+    al_check.add_argument("--demo", metavar="HUB", help="simulate a storm for this hub: a demo alert, no baseline change")
+    al_list = al_sub.add_parser("list", help="print recent alerts")
+    al_list.add_argument("--limit", type=int, default=20)
 
     ec = sub.add_parser("eval-classifier", help="benchmark the guardrail classifiers directly on the guardrail "
                                                 "eval cases (uses API credits unless --dry-run)")
@@ -146,19 +168,33 @@ def _log(msg: str) -> None:
     print(f"{style}{msg}\033[0m", file=sys.stderr)
 
 
-def _build_agent(conn, config_dir: Path, simulate_outage: str | None = None):
+def _near_term_service(config_dir: Path, registry: HubRegistry, client: httpx.Client) -> NearTermService:
+    cfg = load_near_term_config(config_dir / "near_term.yaml")
+    return NearTermService(registry, cfg, lambda hub: fetch_forecast(hub, client, days=cfg.forecast_days))
+
+
+def _webhook(client: httpx.Client) -> Notify | None:
+    """Posts a Slack-compatible `{"text": ...}` body to ALERT_WEBHOOK_URL; None when it is unset."""
+    url = os.environ.get("ALERT_WEBHOOK_URL")
+    if not url:
+        return None
+    return lambda text: http.post(client, url, {"text": text})
+
+
+def _build_agent(conn, config_dir: Path, simulate_outage: str | None = None, near_term=None):
     load_dotenv()
     if simulate_outage:
         _log(f"SIMULATED OUTAGE: every {simulate_outage} model fails on every call")
     try:
-        return build_agent(conn, config_dir, os.environ, log=_log, simulate_outage=simulate_outage)
+        return build_agent(conn, config_dir, os.environ, log=_log, simulate_outage=simulate_outage,
+                           near_term=near_term)
     except AgentSetupError as e:
         print(f"{e} Set it in .env (see .env.example).", file=sys.stderr)
         return None
 
 
-def _chat(conn, config_dir: Path, question: str | None, simulate_outage: str | None = None) -> int:
-    built = _build_agent(conn, config_dir, simulate_outage)
+def _chat(conn, config_dir: Path, question: str | None, simulate_outage: str | None = None, near_term=None) -> int:
+    built = _build_agent(conn, config_dir, simulate_outage, near_term)
     if built is None:
         return 1
     agent, config = built
@@ -185,19 +221,23 @@ def _chat(conn, config_dir: Path, question: str | None, simulate_outage: str | N
             _print_reply(agent.ask(conversation, line))
 
 
-def _serve(ctx: ToolContext, config_dir: Path, host: str, port: int) -> int:
+def _serve(ctx: ToolContext, config_dir: Path, host: str, port: int, client: httpx.Client) -> int:
     import uvicorn
 
     from skyrisk.api.app import create_app
     from skyrisk.api.ratelimit import RateLimiter
     from skyrisk.api.sessions import SessionStore
 
-    built = _build_agent(ctx.conn, config_dir)
+    built = _build_agent(ctx.conn, config_dir, near_term=ctx.near_term)
     if built is None:
         return 1
     agent, config = built
+    token = os.environ.get("ALERT_TOKEN") or None
+    if token is None:
+        _log("warning: ALERT_TOKEN is not set; POST /api/alerts/check is disabled")
     app = create_app(agent, SessionStore(max_turns=config.max_history_turns), ctx, log=_log,
-                     limiter=RateLimiter.from_config(config.rate_limit))
+                     limiter=RateLimiter.from_config(config.rate_limit), alert_token=token,
+                     notify=_webhook(client))
     uvicorn.run(app, host=host, port=port)
     return 0
 
@@ -219,7 +259,7 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
     if run_id is None:
         print("No score run exists yet; run `skyrisk ingest` and `skyrisk score` first.", file=sys.stderr)
         return 2
-    built = _build_agent(ctx.conn, config_dir, args.simulate_outage)
+    built = _build_agent(ctx.conn, config_dir, args.simulate_outage, ctx.near_term)
     if built is None:
         return 2
     agent, config = built
@@ -249,6 +289,30 @@ def _eval(ctx: ToolContext, config_dir: Path, args: argparse.Namespace) -> int:
         print(f"Estimated cost: ${report.cost.total_usd:.3f} ({', '.join(f'{k}: {v}' for k, v in report.cost.calls_by_model.items())})")
     print(f"Report: {path} (also {args.out / f'{prefix}latest.md'})")
     return 0 if report.passed else 1
+
+
+def _alerts(ctx: ToolContext, args: argparse.Namespace, client: httpx.Client) -> int:
+    if args.alerts_command == "list":
+        for a in nt_alerts.recent(ctx.conn, limit=args.limit):
+            tag = " [DEMO]" if a.demo else ""
+            print(f"{a.created_at}  {a.hub_id:<12} {a.prev_score:>6.2f} -> {a.new_score:>6.2f} "
+                  f"({a.prev_level} -> {a.new_level}){tag}  {a.reason}; {a.detail}")
+        return 0
+    load_dotenv()
+    try:
+        result = nt_alerts.run_check(ctx.conn, ctx.near_term, notify=_webhook(client), demo_hub=args.demo, log=_log)
+    except KeyError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    except NearTermUnavailable as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    print(f"checked {len(result.hubs_checked)} hub(s) at {result.checked_at}; "
+          f"baseline only: {', '.join(result.baseline_only) or 'none'}; webhook: {result.webhook_status}")
+    for a in result.alerts:
+        print(f"  ALERT{' [DEMO]' if a.demo else ''} {a.hub_id}: {a.prev_score:.2f} -> {a.new_score:.2f} "
+              f"({a.prev_level} -> {a.new_level}); {a.reason}; {a.detail}")
+    return 0 if result.hubs_checked else 1
 
 
 def _classifier_description(config, simulate_outage: str | None = None) -> str | None:
@@ -314,6 +378,10 @@ def main(argv: list[str] | None = None) -> int:
     config = load_scoring_config(args.config_dir / "scoring.yaml")
     # The API serves requests from a threadpool; tools only read the shared connection.
     conn = db.connect(args.db, check_same_thread=args.command != "serve")
+    forecast_client = httpx.Client(timeout=FORECAST_TIMEOUT_S)
+    near_term = (_near_term_service(args.config_dir, registry, forecast_client)
+                 if args.command in NEAR_TERM_COMMANDS else None)
+    ctx = ToolContext(conn, registry, config, near_term)
     try:
         if args.command == "ingest":
             with httpx.Client(timeout=HTTP_TIMEOUT_S) as client:
@@ -325,14 +393,17 @@ def main(argv: list[str] | None = None) -> int:
                   f"data {result.data_hash[:12]}\n")
             _print_ranking(result)
         elif args.command == "show":
-            return _show(ToolContext(conn, registry, config), args.hub_id)
+            return _show(ctx, args.hub_id)
         elif args.command == "chat":
-            return _chat(conn, args.config_dir, args.question, args.simulate_outage)
+            return _chat(conn, args.config_dir, args.question, args.simulate_outage, near_term)
         elif args.command == "serve":
-            return _serve(ToolContext(conn, registry, config), args.config_dir, args.host, args.port)
+            return _serve(ctx, args.config_dir, args.host, args.port, forecast_client)
         elif args.command == "eval":
-            return _eval(ToolContext(conn, registry, config), args.config_dir, args)
+            return _eval(ctx, args.config_dir, args)
+        elif args.command == "alerts":
+            return _alerts(ctx, args, forecast_client)
     finally:
+        forecast_client.close()
         conn.close()
     return 0
 

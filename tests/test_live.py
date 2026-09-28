@@ -75,3 +75,15 @@ def test_jev_classifier_smoke():
             "Which hub has the most snow days?")
     assert verdict.label == "in_scope", verdict.reason
     assert verdict.usage and verdict.usage[0].model == CONFIG.classifier.jev.model
+
+
+def test_open_meteo_forecast_live():
+    from skyrisk.config import load_hubs, load_near_term_config
+    from skyrisk.ingest.open_meteo import fetch_forecast
+    from skyrisk.nearterm.engine import score_forecast
+
+    cfg = load_near_term_config(ROOT / "config" / "near_term.yaml")
+    with httpx.Client(timeout=30) as client:
+        days = fetch_forecast(load_hubs(ROOT / "config" / "hubs.yaml").get("chicago"), client, days=cfg.forecast_days)
+    assert len(days) == cfg.forecast_days
+    assert 0 <= score_forecast(days, cfg).score <= 100

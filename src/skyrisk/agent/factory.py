@@ -18,6 +18,7 @@ from skyrisk.agent.providers.anthropic_provider import AnthropicProvider
 from skyrisk.agent.providers.base import LLMProvider, ProviderUnavailable
 from skyrisk.agent.providers.openai_provider import OpenAIProvider
 from skyrisk.agent.tools import ToolContext
+from skyrisk.nearterm.service import NearTermService
 from skyrisk.config import (
     AgentConfig,
     ClassifierConfig,
@@ -69,9 +70,11 @@ def _has_key(cfg: ModelConfig, env: Mapping[str, str]) -> bool:
 
 
 def build_agent(conn: sqlite3.Connection, config_dir: Path, env: Mapping[str, str],
-                log: Log = print, *, simulate_outage: str | None = None) -> tuple[Agent, AgentConfig]:
+                log: Log = print, *, simulate_outage: str | None = None,
+                near_term: NearTermService | None = None) -> tuple[Agent, AgentConfig]:
     """`simulate_outage` names a vendor (e.g. "anthropic") whose models all fail on every call, so the
-    agent takes its real outage path. For evals and manual testing only."""
+    agent takes its real outage path. For evals and manual testing only. `near_term` backs the
+    near_term_risk tool (None: the tool says it is not configured)."""
     config = load_agent_config(config_dir / "agent.yaml").with_env_overrides(env)
     registry = load_hubs(config_dir / "hubs.yaml")
     scoring = load_scoring_config(config_dir / "scoring.yaml")
@@ -97,7 +100,7 @@ def build_agent(conn: sqlite3.Connection, config_dir: Path, env: Mapping[str, st
     classifier = build_classifier(config.classifier, env, log, down=simulate_outage) if config.classifier else None
 
     agent = Agent(
-        ToolContext(conn, registry, scoring),
+        ToolContext(conn, registry, scoring, near_term),
         providers,
         build_system_prompt(registry, scoring),
         classifier=classifier,

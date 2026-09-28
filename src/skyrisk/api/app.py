@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import hmac
 from pathlib import Path
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Header, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from skyrisk import db
 from skyrisk.agent.core import Agent, Log, Status
 from skyrisk.agent.tools import HubInfo, ListHubsInput, ToolContext, list_hubs
 from skyrisk.api.ratelimit import RateLimiter
 from skyrisk.api.sessions import SessionStore
+from skyrisk.nearterm import alerts as nt_alerts
+from skyrisk.nearterm.alerts import Alert, CheckResult, Notify
 
 STATIC_DIR = Path(__file__).parent / "static"
 MAX_MESSAGE_CHARS = 10_000  # transport cap; the agent's own limit produces the friendly message
@@ -35,6 +39,19 @@ class ChatResponse(BaseModel):
     tools_used: list[str]
 
 
+class AlertCheckRequest(BaseModel):
+    demo_hub: str | None = Field(default=None, description="Simulate a storm for this hub (demo alert, no baseline change)")
+
+
+class AlertView(Alert):
+    city: str
+
+
+class AlertsResponse(BaseModel):
+    alerts: list[AlertView]
+    last_check_at: str | None = Field(description="When the last (non-demo) check ran; None since the last restart")
+
+
 def client_ip(request: Request) -> str:
     """The caller's IP: the first X-Forwarded-For entry (set by Render's proxy), else the socket peer.
 
@@ -47,8 +64,13 @@ def client_ip(request: Request) -> str:
 
 
 def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: Log = print,
-               limiter: RateLimiter | None = None) -> FastAPI:
-    """`limiter=None` disables rate limiting; `skyrisk serve` always passes one."""
+               limiter: RateLimiter | None = None, alert_token: str | None = None,
+               notify: Notify | None = None) -> FastAPI:
+    """`limiter=None` disables rate limiting; `skyrisk serve` always passes one.
+
+    `alert_token` guards `POST /api/alerts/check`; without it (or without `ctx.near_term`) the check is
+    disabled. `notify` posts one message to the alert webhook; None skips the webhook.
+    """
     app = FastAPI(title="SkyRisk", docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 
     @app.exception_handler(Exception)
@@ -92,6 +114,37 @@ def create_app(agent: Agent, sessions: SessionStore, ctx: ToolContext, *, log: L
     @app.get("/api/hubs")
     def hubs() -> list[HubInfo]:
         return list_hubs(ctx, ListHubsInput()).hubs
+
+    @app.post("/api/alerts/check", responses={
+        401: {"description": "Missing or wrong token"}, 503: {"description": "Alert checks are disabled"}})
+    def check_alerts(req: AlertCheckRequest | None = None,
+                     authorization: str | None = Header(default=None)) -> CheckResult:  # or an error JSONResponse
+        if not alert_token or ctx.near_term is None:
+            return JSONResponse({"detail": "Alert checks are disabled on this server (ALERT_TOKEN is not set)."},
+                                status_code=503)
+        scheme, _, token = (authorization or "").partition(" ")
+        if scheme.lower() != "bearer" or not hmac.compare_digest(token.encode(), alert_token.encode()):
+            log("alerts check: rejected (bad or missing token)")
+            return JSONResponse({"detail": "Invalid or missing token."}, status_code=401,
+                                headers={"WWW-Authenticate": "Bearer"})
+        demo_hub = req.demo_hub if req else None
+        if demo_hub is not None and demo_hub not in {h.id for h in ctx.registry.hubs}:
+            return JSONResponse({"detail": f"Unknown hub id {demo_hub!r}."}, status_code=400)
+        result = nt_alerts.run_check(ctx.conn, ctx.near_term, notify=notify, demo_hub=demo_hub, log=log)
+        log(f"alerts check{' (demo ' + demo_hub + ')' if demo_hub else ''}: {len(result.hubs_checked)} hubs, "
+            f"{len(result.baseline_only)} baseline only, {len(result.alerts)} alerts, webhook {result.webhook_status}")
+        if not result.hubs_checked:
+            return JSONResponse({"detail": "No forecast could be fetched.", "errors": result.errors}, status_code=502)
+        return result
+
+    @app.get("/api/alerts")
+    def recent_alerts(limit: int = Query(default=20, ge=1, le=50), hub_id: str | None = None) -> AlertsResponse:
+        found = nt_alerts.recent(ctx.conn, limit=limit, hub_ids=[hub_id] if hub_id else None)
+        cities = {h.id: h.city for h in ctx.registry.hubs}
+        return AlertsResponse(
+            alerts=[AlertView(**a.model_dump(), city=cities.get(a.hub_id, a.hub_id)) for a in found],
+            last_check_at=db.last_check_at(ctx.conn),
+        )
 
     @app.get("/api/health")
     def health() -> dict:

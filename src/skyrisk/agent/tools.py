@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -18,6 +18,9 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 from skyrisk import db
 from skyrisk.config import HubRegistry, Region, ScoringConfig
 from skyrisk.models import NRI_HAZARDS
+from skyrisk.nearterm import alerts as nt_alerts
+from skyrisk.nearterm.alerts import UNITS
+from skyrisk.nearterm.service import NearTermService, NearTermUnavailable
 from skyrisk.scoring import metrics
 
 Hazard = Literal["overall", "winter", "hurricane", "flood", "tornado", "heat"]
@@ -40,6 +43,7 @@ class ToolContext:
     conn: sqlite3.Connection
     registry: HubRegistry
     scoring: ScoringConfig
+    near_term: NearTermService | None = None  # None: the near_term_risk tool reports it is not configured
 
 
 def relative_caveat(ctx: ToolContext) -> str:
@@ -420,10 +424,13 @@ def weather_stat(ctx: ToolContext, args: WeatherStatInput) -> WeatherStatResult:
     start, end = window.start, window.end
     if args.year is not None:
         if not window.start.year <= args.year <= window.end.year:
-            raise ToolError(
-                f"Year {args.year} is outside the data window "
-                f"({window.start.year}-{window.end.year}); no data is available for it."
-            )
+            message = (f"Year {args.year} is outside the historical data window "
+                       f"({window.start.year}-{window.end.year}, full calendar years only); "
+                       "no historical data is available for it.")
+            if args.year > window.end.year:
+                message += (f" {window.end.year + 1} onward is intentionally excluded because it is not a "
+                            "complete year. For the next 7 days, near_term_risk has the forecast.")
+            raise ToolError(message)
         start, end = max(start, date(args.year, 1, 1)), min(end, date(args.year, 12, 31))
 
     field, predicate, definition = _stat_definition(args.stat, ctx.scoring)
@@ -453,6 +460,117 @@ def weather_stat(ctx: ToolContext, args: WeatherStatInput) -> WeatherStatResult:
         stat=args.stat, unit=args.unit, definition=definition, period_start=start, period_end=end,
         months=args.months, rows=rows, caveats=caveats,
     )
+
+
+# --- near_term_risk ------------------------------------------------------------------
+
+NEAR_TERM_ALERT_DAYS = 7
+
+
+class NearTermRiskInput(BaseModel):
+    hub_ids: list[str] | None = Field(
+        default=None, description="Hub ids; null = all hubs, sorted by near-term score (highest first)")
+
+
+class NearTermHazardRow(BaseModel):
+    hazard: str
+    peak_value: float | None
+    unit: str
+    peak_date: date | None
+    points: float
+
+
+class LastCheck(BaseModel):
+    score: float
+    level: str
+    checked_at: str
+
+
+class AlertBrief(BaseModel):
+    created_at: str
+    prev_score: float
+    new_score: float
+    prev_level: str
+    new_level: str
+    reason: str
+    demo: bool
+
+
+class NearTermRow(BaseModel):
+    hub_id: str
+    name: str
+    score: float
+    level: str
+    hazards: list[NearTermHazardRow]
+    forecast_start: date
+    forecast_end: date
+    fetched_at: str
+    last_check: LastCheck | None
+    recent_alerts: list[AlertBrief]
+
+
+class NearTermRiskResult(ToolResult):
+    config_version: str
+    levels: dict[str, float]
+    rows: list[NearTermRow]
+
+    def scores(self) -> list[ScoreRef]:
+        return [ScoreRef(hub_id=r.hub_id, hazard="near_term", score=r.score) for r in self.rows]
+
+
+def near_term_risk(ctx: ToolContext, args: NearTermRiskInput) -> NearTermRiskResult:
+    service = ctx.near_term
+    if service is None:
+        raise ToolError("The near-term forecast is not configured in this deployment.")
+    hub_ids = args.hub_ids or [h.id for h in ctx.registry.hubs]
+    _check_hubs(ctx, hub_ids)
+    cfg = service.cfg
+    snapshots = db.latest_snapshots(ctx.conn)
+    since = service.now() - timedelta(days=NEAR_TERM_ALERT_DAYS)
+    rows, missing = [], []
+    for hub_id in hub_ids:
+        try:
+            nt = service.score(hub_id)
+        except NearTermUnavailable as e:
+            missing.append(str(e))
+            continue
+        snap = snapshots.get(hub_id)
+        rows.append(NearTermRow(
+            hub_id=hub_id, name=ctx.registry.get(hub_id).name, score=nt.result.score, level=nt.result.level,
+            hazards=[NearTermHazardRow(hazard=h.hazard, peak_value=h.peak_value, unit=UNITS[h.variable],
+                                       peak_date=h.peak_date, points=h.points) for h in nt.result.hazards],
+            forecast_start=nt.result.forecast_start, forecast_end=nt.result.forecast_end,
+            fetched_at=_iso(nt.fetched_at),
+            last_check=LastCheck(score=snap["score"], level=snap["level"], checked_at=snap["checked_at"])
+            if snap else None,
+            recent_alerts=[AlertBrief(**a.model_dump(include=set(AlertBrief.model_fields)))
+                           for a in nt_alerts.recent(ctx.conn, limit=5, hub_ids=[hub_id], since=since)],
+        ))
+    if not rows:
+        raise ToolError(" ".join(missing) or "No near-term forecast is available.")
+    if args.hub_ids is None:
+        rows.sort(key=lambda r: (-r.score, r.hub_id))
+    caveats = [
+        f"Near-term scores are absolute 0-100 forecast severity (levels: low < {cfg.levels.medium:g} <= medium "
+        f"< {cfg.levels.high:g} <= high), computed from the Open-Meteo 7-day forecast (snowfall, wind gusts, "
+        "precipitation, extreme heat). They are NOT the relative historical exposure scores and must not be "
+        "added to, averaged with or ranked against them.",
+        "Forecasts are uncertain and later days are weighted down (lead-time weights); a forecast can change "
+        "from one day to the next.",
+        f"Near-term config v{cfg.version}. Only each row's `score` is a current near-term score; last_check and "
+        "recent_alerts are history from the daily alert check.",
+        "Alert history and the last check reset when the server restarts (ephemeral storage), so an empty "
+        "history does not prove nothing changed.",
+    ]
+    if any(a.demo for r in rows for a in r.recent_alerts):
+        caveats.append("Alerts marked demo=true are simulated demonstrations, not real forecast changes.")
+    caveats += [f"Missing: {m}" for m in missing]
+    return NearTermRiskResult(config_version=cfg.version, levels=cfg.levels.model_dump(), rows=rows,
+                              caveats=caveats)
+
+
+def _iso(when: datetime) -> str:
+    return when.isoformat(timespec="seconds")
 
 
 # --- registry ------------------------------------------------------------------------
@@ -492,6 +610,13 @@ TOOLS: tuple[ToolSpec, ...] = (
         "Historical weather statistics per hub from daily data, e.g. percent of days with snowfall "
         "or average extreme-heat days per year. Optionally restrict to one calendar year or to months.",
         WeatherStatInput, weather_stat,
+    ),
+    ToolSpec(
+        "near_term_risk",
+        "Near-term (next 7 days) weather risk per hub from the live Open-Meteo forecast: an absolute 0-100 "
+        "score with a low/medium/high level, the hazards driving it, the last daily check and recent alerts. "
+        "Use for 'this week', 'next few days', forecast or alert questions.",
+        NearTermRiskInput, near_term_risk,
     ),
 )
 TOOLS_BY_NAME = {t.name: t for t in TOOLS}

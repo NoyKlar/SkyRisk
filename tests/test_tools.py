@@ -55,8 +55,17 @@ def test_weather_stat_single_year_matches_hand_count(tool_ctx):
 
 
 def test_weather_stat_rejects_year_outside_window(tool_ctx):
-    with pytest.raises(ToolError, match="outside the data window"):
+    with pytest.raises(ToolError, match="outside the historical data window") as exc:
         weather_stat(tool_ctx, WeatherStatInput(hub_ids=["denver"], stat="snow_day", unit="pct_days", year=2014))
+    assert "intentionally excluded" not in str(exc.value)
+
+
+def test_weather_stat_2026_says_it_is_intentionally_excluded(tool_ctx):
+    with pytest.raises(ToolError) as exc:
+        weather_stat(tool_ctx, WeatherStatInput(hub_ids=["denver"], stat="snow_day", unit="pct_days", year=2026))
+    message = str(exc.value)
+    assert "2016-2025, full calendar years only" in message
+    assert "2026 onward is intentionally excluded" in message and "near_term_risk" in message
 
 
 def test_weather_stat_months_filter(tool_ctx):

@@ -8,6 +8,9 @@ from skyrisk.agent.core import AgentReply
 from skyrisk.agent.guardrails import GROUNDING_TOLERANCE
 from skyrisk.agent.tools import ToolContext, ToolError, _hazard_scores, _latest_run
 from skyrisk.evals.cases import EvalCase, ExpectTool
+from skyrisk.nearterm.service import NearTermUnavailable
+
+NEAR_TERM = "near_term"
 
 
 def check_run(case: EvalCase, reply: AgentReply, ctx: ToolContext) -> list[str]:
@@ -70,14 +73,17 @@ def _check_order(hub_ids: list[str], text: str, ctx: ToolContext) -> list[str]:
 
 
 def _check_grounding(scores_cited: list[dict], ctx: ToolContext) -> list[str]:
-    """Independent re-check: every cited score must match the latest score run in the DB."""
+    """Independent re-check: every cited historical score must match the latest score run in the DB, and
+    every near_term score must match the near-term service (whose cache the agent's tool call just filled)."""
+    near_term = [c for c in scores_cited if c["hazard"] == NEAR_TERM]
+    scores_cited = [c for c in scores_cited if c["hazard"] != NEAR_TERM]
+    reasons = _check_near_term(near_term, ctx)
     if not scores_cited:
-        return []
+        return reasons
     try:
         run_id, _ = _latest_run(ctx)
     except ToolError as e:
-        return [f"grounding: {e}"]
-    reasons = []
+        return reasons + [f"grounding: {e}"]
     by_hazard: dict[str, dict[str, float]] = {}
     for cited in scores_cited:
         hazard = cited["hazard"]
@@ -89,6 +95,21 @@ def _check_grounding(scores_cited: list[dict], ctx: ToolContext) -> list[str]:
         elif abs(actual - cited["score"]) > GROUNDING_TOLERANCE:
             reasons.append(f"grounding: {cited['hub_id']}/{hazard} cited as {cited['score']}, "
                            f"score run {run_id} has {actual:.2f}")
+    return reasons
+
+
+def _check_near_term(cited: list[dict], ctx: ToolContext) -> list[str]:
+    if cited and ctx.near_term is None:
+        return ["grounding: near_term scores cited but no near-term service is configured"]
+    reasons = []
+    for c in cited:
+        try:
+            actual = ctx.near_term.score(c["hub_id"]).result.score
+        except (KeyError, NearTermUnavailable) as e:
+            reasons.append(f"grounding: {c['hub_id']}/near_term cannot be re-checked: {e}")
+            continue
+        if abs(actual - c["score"]) > GROUNDING_TOLERANCE:
+            reasons.append(f"grounding: {c['hub_id']}/near_term cited as {c['score']}, forecast has {actual:.2f}")
     return reasons
 
 

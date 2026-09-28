@@ -1,4 +1,4 @@
-"""Open-Meteo historical weather (archive API) client."""
+"""Open-Meteo clients: historical weather (archive API) and the daily forecast (forecast API)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from skyrisk.ingest.http import get_json
 from skyrisk.models import WeatherDay
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 DAILY_VARS = (
     "snowfall_sum",
     "temperature_2m_max",
@@ -72,6 +73,11 @@ def parse_archive(payload: dict) -> list[WeatherDay]:
     ]
 
 
+def parse_forecast(payload: dict) -> list[WeatherDay]:
+    """The forecast API returns the same daily shape and units as the archive."""
+    return parse_archive(payload)
+
+
 def fetch_daily(hub: Hub, start: date, end: date, client: httpx.Client) -> list[WeatherDay]:
     params = {
         "latitude": hub.lat,
@@ -82,3 +88,15 @@ def fetch_daily(hub: Hub, start: date, end: date, client: httpx.Client) -> list[
         "timezone": "auto",
     }
     return parse_archive(get_json(client, ARCHIVE_URL, params))
+
+
+def fetch_forecast(hub: Hub, client: httpx.Client, *, days: int = 7, retries: int = 1) -> list[WeatherDay]:
+    """Daily forecast from today (hub-local) for `days` days. Few retries: callers are interactive."""
+    params = {
+        "latitude": hub.lat,
+        "longitude": hub.lon,
+        "daily": ",".join(DAILY_VARS),
+        "timezone": "auto",
+        "forecast_days": days,
+    }
+    return parse_forecast(get_json(client, FORECAST_URL, params, retries=retries))

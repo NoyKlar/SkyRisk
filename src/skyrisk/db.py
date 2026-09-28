@@ -87,6 +87,28 @@ CREATE TABLE IF NOT EXISTS metric_values (
     note TEXT,
     PRIMARY KEY (run_id, hub_id, hazard, metric)
 );
+CREATE TABLE IF NOT EXISTS near_term_snapshots (
+    hub_id TEXT NOT NULL REFERENCES hubs(id),
+    checked_at TEXT NOT NULL,
+    score REAL NOT NULL,
+    level TEXT NOT NULL,
+    config_version TEXT NOT NULL,
+    PRIMARY KEY (hub_id, checked_at)
+);
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    hub_id TEXT NOT NULL REFERENCES hubs(id),
+    prev_score REAL NOT NULL,
+    new_score REAL NOT NULL,
+    prev_level TEXT NOT NULL,
+    new_level TEXT NOT NULL,
+    delta REAL NOT NULL,
+    reason TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    demo INTEGER NOT NULL,
+    webhook_status TEXT NOT NULL
+);
 """
 
 
@@ -235,3 +257,54 @@ def persist_run(conn: sqlite3.Connection, result: ScoreResult) -> int:
 def latest_run_id(conn: sqlite3.Connection) -> int | None:
     row = conn.execute("SELECT MAX(run_id) FROM score_runs").fetchone()
     return row[0]
+
+
+# --- near-term snapshots and alerts ------------------------------------------------
+# Written at runtime by the alert check. On Render's free tier the disk is ephemeral, so these
+# tables start empty after every restart (the first check then only sets a baseline).
+
+def latest_snapshots(conn: sqlite3.Connection) -> dict[str, sqlite3.Row]:
+    rows = conn.execute(
+        """SELECT s.* FROM near_term_snapshots s
+           JOIN (SELECT hub_id, MAX(checked_at) AS latest FROM near_term_snapshots GROUP BY hub_id) m
+             ON s.hub_id = m.hub_id AND s.checked_at = m.latest"""
+    ).fetchall()
+    return {r["hub_id"]: r for r in rows}
+
+
+def insert_snapshots(conn: sqlite3.Connection, checked_at: str, rows: list[tuple[str, float, str]],
+                     config_version: str) -> None:
+    conn.executemany(
+        "INSERT OR REPLACE INTO near_term_snapshots (hub_id, checked_at, score, level, config_version) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [(hub_id, checked_at, score, level, config_version) for hub_id, score, level in rows],
+    )
+
+
+def insert_alert(conn: sqlite3.Connection, values: dict[str, object]) -> int:
+    cols = ", ".join(values)
+    params = ", ".join(f":{c}" for c in values)
+    return conn.execute(f"INSERT INTO alerts ({cols}) VALUES ({params})", values).lastrowid
+
+
+def set_webhook_status(conn: sqlite3.Connection, alert_ids: list[int], status: str) -> None:
+    conn.executemany("UPDATE alerts SET webhook_status = ? WHERE id = ?", [(status, i) for i in alert_ids])
+    conn.commit()
+
+
+def recent_alerts(conn: sqlite3.Connection, *, limit: int, hub_ids: list[str] | None = None,
+                  since: str | None = None) -> list[sqlite3.Row]:
+    where, params = [], []
+    if hub_ids:
+        where.append(f"hub_id IN ({', '.join('?' for _ in hub_ids)})")
+        params += hub_ids
+    if since:
+        where.append("created_at >= ?")
+        params.append(since)
+    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    return conn.execute(f"SELECT * FROM alerts {clause} ORDER BY created_at DESC, id DESC LIMIT ?",
+                        (*params, limit)).fetchall()
+
+
+def last_check_at(conn: sqlite3.Connection) -> str | None:
+    return conn.execute("SELECT MAX(checked_at) FROM near_term_snapshots").fetchone()[0]

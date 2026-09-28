@@ -25,7 +25,7 @@ def _with_retries(
     retries: int,
     backoff_s: float,
     sleep: Callable[[float], None],
-) -> dict:
+) -> httpx.Response:
     for attempt in range(retries + 1):
         delay = min(backoff_s * 2**attempt, MAX_BACKOFF_S)
         try:
@@ -36,7 +36,7 @@ def _with_retries(
         else:
             if response.status_code not in RETRY_STATUSES or attempt == retries:
                 response.raise_for_status()
-                return response.json()
+                return response
             delay = _retry_after(response) or delay
         sleep(delay)
     raise AssertionError("unreachable")
@@ -56,7 +56,8 @@ def get_json(
     Honors a numeric Retry-After header. The default schedule (2, 4, ... capped at
     60 s) waits about 2 minutes in total, which outlasts per-minute API rate limits.
     """
-    return _with_retries(lambda: client.get(url, params=params), retries=retries, backoff_s=backoff_s, sleep=sleep)
+    return _with_retries(lambda: client.get(url, params=params), retries=retries, backoff_s=backoff_s,
+                         sleep=sleep).json()
 
 
 def post_json(
@@ -71,4 +72,17 @@ def post_json(
 ) -> dict:
     """POST a JSON body and return the JSON response, with the same retry policy as `get_json`."""
     return _with_retries(lambda: client.post(url, json=body, headers=headers),
-                         retries=retries, backoff_s=backoff_s, sleep=sleep)
+                         retries=retries, backoff_s=backoff_s, sleep=sleep).json()
+
+
+def post(
+    client: httpx.Client,
+    url: str,
+    body: dict[str, object],
+    *,
+    retries: int = 2,
+    backoff_s: float = 2.0,
+    sleep: Callable[[float], None] = time.sleep,
+) -> None:
+    """POST a JSON body and ignore the response body (e.g. Slack webhooks answer plain `ok`)."""
+    _with_retries(lambda: client.post(url, json=body), retries=retries, backoff_s=backoff_s, sleep=sleep)

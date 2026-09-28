@@ -1,0 +1,34 @@
+# Near-term (7-day forecast) risk configuration. Bump `version` whenever a threshold or weight changes.
+# Unlike the historical score, this score is absolute (not relative across hubs): 0 = nothing notable
+# forecast, 100 = severe weather expected. See docs/DESIGN.md §12.
+version: "1.0"
+
+forecast_days: 7
+
+# Multiplier per forecast day (day 0 = today). Forecast skill decays with lead time, so a storm
+# 6 days out counts less than the same storm tomorrow. Length must equal forecast_days.
+lead_time_weights: [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.6]
+
+# Per hazard: a day's severity ramps linearly from 0 at `watch` to 1 at `severe` (daily Open-Meteo
+# value of `variable`). The hazard earns max_points x its worst weighted day; the score is the sum,
+# capped at 100. Every max_points must be >= levels.high, so one hazard at full severity on day 0
+# reaches "high" on its own.
+hazards:
+  snow:         {variable: snowfall_cm,       watch: 2.0,  severe: 15.0,  max_points: 70}  # historical heavy snow: 10 cm
+  wind:         {variable: wind_gust_max_kmh, watch: 60.0, severe: 100.0, max_points: 70}  # historical high wind: 90 km/h
+  heavy_rain:   {variable: precip_mm,         watch: 25.0, severe: 75.0,  max_points: 70}  # historical heavy rain: 50 mm
+  extreme_heat: {variable: temp_max_c,        watch: 35.0, severe: 42.0,  max_points: 70}  # historical extreme heat: 35 C
+
+# Score < medium = low, medium <= score < high = medium, score >= high = high.
+levels: {medium: 35, high: 65}
+
+alerts:
+  change_threshold: 20   # alert when |new - previous| >= this, or when the level changes
+
+cache_ttl_s: 3600        # the agent tool reuses a hub's forecast for this long
+
+# Demo mode (POST /api/alerts/check {"demo_hub": ...}): these values are merged into the chosen hub's
+# real forecast on day `day_offset` and scored by the same engine. Nothing is saved as a baseline.
+demo:
+  day_offset: 1
+  values: {snowfall_cm: 30.0, wind_gust_max_kmh: 95.0}
